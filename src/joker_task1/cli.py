@@ -3,9 +3,12 @@ from __future__ import annotations
 import argparse
 import itertools
 from random import Random
+from typing import Callable
 
 from .data import load_json, save_json, to_qrel_map, zip_single_file
 from .retriever import HybridTask1Retriever
+
+ProgressFn = Callable[[str, float], None]
 
 
 def map_at_k(pred_by_qid: dict[str, list[str]], rel_by_qid: dict[str, set[str]], k: int = 1000) -> float:
@@ -63,21 +66,35 @@ def build_predictions(
     qrels_path: str | None = None,
     top_k: int = 1000,
     params: dict | None = None,
+    progress: ProgressFn | None = None,
 ) -> list[dict]:
+    if progress:
+        progress("Loading input files...", 0.02)
     docs = load_json(docs_path)
     queries = load_json(queries_path)
     qrels = load_json(qrels_path) if qrels_path else None
 
     retriever = HybridTask1Retriever(**(params or {}))
-    retriever.fit(docs=docs, qrels=qrels)
+    retriever.fit(docs=docs, qrels=qrels, progress=progress)
 
-    rankings = {str(q["qid"]): retriever.rank(str(q["query"]), top_k=top_k) for q in queries}
+    rankings = {}
+    total_queries = max(1, len(queries))
+    for idx, q in enumerate(queries, start=1):
+        qid = str(q["qid"])
+        rankings[qid] = retriever.rank(str(q["query"]), top_k=top_k)
+        if progress and (idx % 5 == 0 or idx == total_queries):
+            progress(f"Ranking queries: {idx}/{total_queries}", 0.6 + 0.3 * (idx / total_queries))
+
     rows = predictions_from_rankings(run_id, manual, queries, rankings)
     save_json(rows, output_path)
+    if progress:
+        progress(f"Saved predictions to {output_path}", 0.96)
     return rows
 
 
-def tune_params(docs: list[dict], queries: list[dict], qrels: list[dict], top_k: int = 1000) -> tuple[dict, float]:
+def tune_params(
+    docs: list[dict], queries: list[dict], qrels: list[dict], top_k: int = 1000, progress: ProgressFn | None = None
+) -> tuple[dict, float]:
     train_qrels, valid_qrels = split_qrels_by_query(qrels)
 
     qtext = {str(q["qid"]): str(q["query"]) for q in queries}
@@ -96,7 +113,10 @@ def tune_params(docs: list[dict], queries: list[dict], qrels: list[dict], top_k:
     best_map = -1.0
 
     keys = list(grid.keys())
-    for vals in itertools.product(*(grid[k] for k in keys)):
+    combos = list(itertools.product(*(grid[k] for k in keys)))
+    total = max(1, len(combos))
+
+    for i, vals in enumerate(combos, start=1):
         params = dict(zip(keys, vals))
         retriever = HybridTask1Retriever(**params)
         retriever.fit(docs=docs, qrels=train_qrels)
@@ -110,6 +130,9 @@ def tune_params(docs: list[dict], queries: list[dict], qrels: list[dict], top_k:
         if score > best_map:
             best_map = score
             best_params = params
+
+        if progress and (i % 10 == 0 or i == total):
+            progress(f"Auto-tune grid search: {i}/{total}", 0.05 + 0.45 * (i / total))
 
     return best_params, best_map
 

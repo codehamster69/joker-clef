@@ -4,9 +4,10 @@ import math
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Callable, Iterable
 
 TOKEN_RE = re.compile(r"\b\w+\b", flags=re.UNICODE)
+ProgressFn = Callable[[str, float], None]
 
 
 @dataclass(frozen=True)
@@ -16,14 +17,7 @@ class RetrievedDoc:
 
 
 class HybridTask1Retriever:
-    """Efficient lexical retriever for JOKER Task 1.
-
-    Hybrid score =
-      bm25_weight * BM25(tokenized text)
-      + char_weight * Character 3-5gram TF-IDF cosine
-      + humor_weight * qrels prior
-      + match_boost * exact substring match
-    """
+    """Efficient lexical retriever for JOKER Task 1."""
 
     def __init__(
         self,
@@ -70,11 +64,12 @@ class HybridTask1Retriever:
             grams.extend(t[i : i + n] for i in range(len(t) - n + 1))
         return grams
 
-    def fit(self, docs: Iterable[dict], qrels: Iterable[dict] | None = None) -> None:
+    def fit(self, docs: Iterable[dict], qrels: Iterable[dict] | None = None, progress: ProgressFn | None = None) -> None:
         docs = list(docs)
         total_len = 0
+        total_docs = max(1, len(docs))
 
-        for d in docs:
+        for i, d in enumerate(docs, start=1):
             docid = str(d["docid"])
             text = str(d["text"])
             text_lower = text.lower()
@@ -93,6 +88,9 @@ class HybridTask1Retriever:
             for g in ctf:
                 self.char_df[g] += 1
 
+            if progress and (i % 2000 == 0 or i == total_docs):
+                progress(f"Indexed documents: {i}/{total_docs}", 0.4 * (i / total_docs))
+
         n_docs = max(1, len(self.term_freqs))
         self.avgdl = total_len / n_docs
 
@@ -102,17 +100,23 @@ class HybridTask1Retriever:
         for gram, df in self.char_df.items():
             self.char_idf[gram] = math.log(1 + n_docs / (1 + df))
 
-        for docid, ctf in self.char_tf.items():
+        total_tf = max(1, len(self.char_tf))
+        for i, (docid, ctf) in enumerate(self.char_tf.items(), start=1):
             norm2 = 0.0
             for gram, tf in ctf.items():
                 w = (1.0 + math.log(tf)) * self.char_idf.get(gram, 0.0)
                 norm2 += w * w
             self.char_doc_norm[docid] = math.sqrt(norm2) if norm2 > 0 else 1.0
+            if progress and (i % 2000 == 0 or i == total_tf):
+                progress(f"Computed vector norms: {i}/{total_tf}", 0.4 + 0.2 * (i / total_tf))
 
         if qrels:
             positive_ids = {str(r["docid"]) for r in qrels if int(r.get("qrel", 0)) > 0}
             for docid in self.term_freqs:
                 self.humor_prior[docid] = 1.0 if docid in positive_ids else 0.0
+
+        if progress:
+            progress("Model fitting complete.", 0.6)
 
     def bm25(self, query_tokens: list[str], docid: str) -> float:
         score = 0.0
@@ -181,7 +185,4 @@ class HybridTask1Retriever:
         min_score = min(r.score for r in rows)
         if max_score == min_score:
             return [RetrievedDoc(docid=r.docid, score=1.0) for r in rows]
-        return [
-            RetrievedDoc(docid=r.docid, score=(r.score - min_score) / (max_score - min_score))
-            for r in rows
-        ]
+        return [RetrievedDoc(docid=r.docid, score=(r.score - min_score) / (max_score - min_score)) for r in rows]

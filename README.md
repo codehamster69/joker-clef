@@ -2,79 +2,78 @@
 
 This repository contains a practical retrieval pipeline for **Task 1: Humour-aware information retrieval**.
 
-## Expected data files
+## Input files
 
-Place your Task 1 data files anywhere in the repo and pass paths via CLI.
-Typical setup is 4 JSON files:
-- English corpus (`docid`, `text`)
-- English queries (`qid`, `query`)
-- Portuguese corpus (`docid`, `text`)
-- Portuguese queries (`qid`, `query`)
+For EN task, use:
+- `joker_task1_retrieval_corpus25_EN.json`
+- `joker_task1_retrieval_queries_train25_EN.json`
+- `joker_task1_retrieval_queries_test25_EN.json`
+- `joker_task1_retrieval_qrels_train25_EN.json`
 
-If train qrels are available, pass them with `--qrels` for better ranking.
+> Make sure each file is a valid JSON array (`[...]`).
 
-## Method (stronger efficient baseline)
+## Run with GUI (recommended)
 
-Hybrid lexical score:
-1. **BM25** on tokenized text.
-2. **Character n-gram TF-IDF cosine** (robust for short queries, names, morphology).
-3. **Humor prior** from train qrels.
-4. **Exact query-substring boost**.
-
-Everything is dependency-free (Python stdlib only).
-
-## Setup
+### Start GUI
 
 ```bash
-python -m pip install -e .
+PYTHONPATH=src python -m joker_task1.gui
 ```
 
-## Build predictions
+In the GUI:
+1. Select corpus, queries, and optional qrels files.
+2. Set `run_id`, `top-k`, and whether the run is manual.
+3. Enable **Auto-tune** if you want parameter search (requires qrels).
+4. Click **Run Prediction**.
+5. Watch live progress bar + logs (indexing, tuning, ranking, saving).
+
+The GUI writes:
+- `prediction.json`
+- optional zip with `prediction.json` at root for Codabench submission.
+
+## Run with CLI
+
+### Build prediction for test set
 
 ```bash
-joker-task1 predict \
-  --docs data/docs_en.json \
-  --queries data/queries_en_test.json \
-  --qrels data/qrels_en_train.json \
-  --run-id YOURTEAM_task_1_hybrid \
+PYTHONPATH=src python -m joker_task1.cli predict \
+  --docs joker_task1_retrieval_corpus25_EN.json \
+  --queries joker_task1_retrieval_queries_test25_EN.json \
+  --qrels joker_task1_retrieval_qrels_train25_EN.json \
+  --run-id YOURTEAM_task_1_hybrid_en \
   --manual 0 \
   --output prediction.json \
   --zip submission.zip
 ```
 
-## Auto-tune parameters (recommended)
-
-This does a query-level holdout split over the provided qrels and picks the best parameter set by MAP.
+### Auto-tune on train queries
 
 ```bash
-joker-task1 predict \
-  --docs data/docs_en.json \
-  --queries data/queries_en_train.json \
-  --qrels data/qrels_en_train.json \
+PYTHONPATH=src python -m joker_task1.cli predict \
+  --docs joker_task1_retrieval_corpus25_EN.json \
+  --queries joker_task1_retrieval_queries_train25_EN.json \
+  --qrels joker_task1_retrieval_qrels_train25_EN.json \
   --auto-tune \
-  --run-id YOURTEAM_task_1_hybrid_tuned \
+  --run-id YOURTEAM_task_1_hybrid_en_tuned \
   --manual 0 \
-  --output prediction.json \
-  --zip submission.zip
+  --output prediction_train_tuned.json
 ```
 
-## Evaluate locally
+### Evaluate MAP@K
 
 ```bash
-joker-task1 eval \
-  --predictions prediction.json \
-  --qrels data/qrels_en_train.json \
+PYTHONPATH=src python -m joker_task1.cli eval \
+  --predictions prediction_train_tuned.json \
+  --qrels joker_task1_retrieval_qrels_train25_EN.json \
   -k 1000
 ```
 
-## Output format
+## Retrieval method
 
-Each row in `prediction.json`:
-- `run_id`
-- `manual`
-- `qid`
-- `docid`
-- `rank`
-- `score` in [0,1]
+Hybrid score combines:
+1. BM25 on word tokens
+2. Character 3–5gram TF-IDF cosine
+3. Humor prior from training qrels
+4. Exact query substring boost
 
-ZIP submissions must contain `prediction.json` at the root.
+This stays dependency-free (stdlib only) and is suitable for fast experimentation.

@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "joker-clef-task1"
+version = "0.3.0"
+description = "Efficient baseline pipeline for CLEF JOKER 2025 Task 1"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+joker-task1 = "joker_task1.cli:main"
+joker-task1-gui = "joker_task1.gui:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -12,7 +12,9 @@ For EN task, use:
 
 > Make sure each file is a valid JSON array (`[...]`).
 
-## Run with GUI (recommended)
+---
+
+## GUI workflow (recommended)
 
 ### Start GUI
 
@@ -20,33 +22,38 @@ For EN task, use:
 PYTHONPATH=src python -m joker_task1.gui
 ```
 
-In the GUI:
-1. Select corpus, queries, and optional qrels files.
-2. Set `run_id`, `top-k`, and whether the run is manual.
-3. Enable **Auto-tune** if you want parameter search (requires qrels).
-4. Click **Run Prediction**.
-5. Watch live progress bar + logs (indexing, tuning, ranking, saving).
+### What GUI now supports
 
-The GUI writes:
-- `prediction.json`
-- optional zip with `prediction.json` at root for Codabench submission.
+- Prediction run setup (docs, queries, qrels, run_id, manual, top-k, zip)
+- Auto-tuning with live progress
+- Save tuned parameters to JSON (e.g., `tuned_params.json`)
+- Load previously tuned parameters JSON and reuse for prediction
+- Evaluate predictions (MAP@K) directly in GUI
+- Detailed logs of each stage (indexing, tuning, ranking, saving, evaluation)
 
-## Run with CLI
+### How to use tuned setup for test prediction (GUI)
 
-### Build prediction for test set
+1. Run auto-tune on train queries:
+   - Queries: `joker_task1_retrieval_queries_train25_EN.json`
+   - Qrels: `joker_task1_retrieval_qrels_train25_EN.json`
+   - Enable **Auto-tune**
+   - Set **Save tuned params JSON** to `tuned_params.json`
+2. Generate final test prediction with tuned params:
+   - Queries: `joker_task1_retrieval_queries_test25_EN.json`
+   - Disable **Auto-tune**
+   - Set **Load tuned params JSON** to `tuned_params.json`
+   - Run prediction and create submission zip.
 
-```bash
-PYTHONPATH=src python -m joker_task1.cli predict \
-  --docs joker_task1_retrieval_corpus25_EN.json \
-  --queries joker_task1_retrieval_queries_test25_EN.json \
-  --qrels joker_task1_retrieval_qrels_train25_EN.json \
-  --run-id YOURTEAM_task_1_hybrid_en \
-  --manual 0 \
-  --output prediction.json \
-  --zip submission.zip
-```
+### Evaluate in GUI
 
-### Auto-tune on train queries
+- Use **Evaluate after prediction** (same run) if qrels are available.
+- Or click **Evaluate Existing Predictions** and choose any `prediction.json` + qrels.
+
+---
+
+## CLI workflow
+
+### 1) Tune on train and save best params (printed in log)
 
 ```bash
 PYTHONPATH=src python -m joker_task1.cli predict \
@@ -59,7 +66,7 @@ PYTHONPATH=src python -m joker_task1.cli predict \
   --output prediction_train_tuned.json
 ```
 
-### Evaluate MAP@K
+### 2) Evaluate train predictions
 
 ```bash
 PYTHONPATH=src python -m joker_task1.cli eval \
@@ -67,6 +74,30 @@ PYTHONPATH=src python -m joker_task1.cli eval \
   --qrels joker_task1_retrieval_qrels_train25_EN.json \
   -k 1000
 ```
+
+### 3) Build final test submission
+
+```bash
+PYTHONPATH=src python -m joker_task1.cli predict \
+  --docs joker_task1_retrieval_corpus25_EN.json \
+  --queries joker_task1_retrieval_queries_test25_EN.json \
+  --qrels joker_task1_retrieval_qrels_train25_EN.json \
+  --run-id YOURTEAM_task_1_hybrid_en_final \
+  --manual 0 \
+  --output prediction.json \
+  --zip submission.zip
+```
+
+---
+
+## Top-K meaning
+
+`top-k` is the maximum number of retrieved documents per query.
+
+- Higher `top-k` improves recall and usually MAP potential.
+- This track allows up to 1000 documents/query, so default `1000` is recommended.
+
+---
 
 ## Retrieval method
 

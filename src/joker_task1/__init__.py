@@ -3,4 +3,9 @@
 __all__ = [
     "data",
     "retriever",
+    "dense",
+    "fusion",
+    "features",
+    "rerank",
+    "humor_classifier",
 ]

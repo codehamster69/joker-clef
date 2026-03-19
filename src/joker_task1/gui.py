@@ -17,6 +17,7 @@ class Task1Gui:
         self.root = root
         self.root.title("JOKER Task 1 Retriever")
         self.root.geometry("1220x920")
+        self.root.minsize(980, 720)
 
         self.events: queue.Queue[tuple[str, str, float | None]] = queue.Queue()
         self.running = False
@@ -60,8 +61,26 @@ class Task1Gui:
         self._update_resources()
 
     def _build_ui(self):
-        frm = ttk.Frame(self.root, padding=12)
-        frm.pack(fill="both", expand=True)
+        outer = ttk.Frame(self.root)
+        outer.pack(fill="both", expand=True)
+
+        self.canvas = tk.Canvas(outer, highlightthickness=0)
+        self.canvas.pack(side="left", fill="both", expand=True)
+
+        outer_scroll = ttk.Scrollbar(outer, orient="vertical", command=self.canvas.yview)
+        outer_scroll.pack(side="right", fill="y")
+        self.canvas.configure(yscrollcommand=outer_scroll.set)
+
+        self.scroll_frame = ttk.Frame(self.canvas, padding=12)
+        self.canvas_window = self.canvas.create_window((0, 0), window=self.scroll_frame, anchor="nw")
+
+        self.scroll_frame.bind("<Configure>", self._on_frame_configure)
+        self.canvas.bind("<Configure>", self._on_canvas_configure)
+        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+        self.canvas.bind_all("<Button-4>", self._on_mousewheel_linux)
+        self.canvas.bind_all("<Button-5>", self._on_mousewheel_linux)
+
+        frm = self.scroll_frame
 
         def add_file_row(parent: ttk.Frame, label: str, var: tk.StringVar, row: int, *, directory: bool = False):
             ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", pady=4)
@@ -159,11 +178,33 @@ class Task1Gui:
         ttk.Label(system, textvariable=self.resource_var).grid(row=2, column=0, sticky="w", pady=(6, 0))
         system.columnconfigure(0, weight=1)
 
-        self.log = tk.Text(frm, height=24, wrap="word")
-        self.log.grid(row=7, column=0, sticky="nsew", pady=(10, 0))
+        log_frame = ttk.LabelFrame(frm, text="Logger", padding=10)
+        log_frame.grid(row=7, column=0, sticky="nsew", pady=(10, 0))
+        self.log = tk.Text(log_frame, height=24, wrap="word")
+        self.log.grid(row=0, column=0, sticky="nsew")
+        log_scroll = ttk.Scrollbar(log_frame, orient="vertical", command=self.log.yview)
+        log_scroll.grid(row=0, column=1, sticky="ns")
+        self.log.configure(yscrollcommand=log_scroll.set)
+        log_frame.columnconfigure(0, weight=1)
+        log_frame.rowconfigure(0, weight=1)
 
         frm.columnconfigure(0, weight=1)
         frm.rowconfigure(7, weight=1)
+
+    def _on_frame_configure(self, _event=None):
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    def _on_canvas_configure(self, event):
+        self.canvas.itemconfigure(self.canvas_window, width=event.width)
+
+    def _on_mousewheel(self, event):
+        if self.canvas.winfo_exists():
+            self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    def _on_mousewheel_linux(self, event):
+        if self.canvas.winfo_exists():
+            direction = -1 if event.num == 4 else 1
+            self.canvas.yview_scroll(direction, "units")
 
     def _browse_file(self, var: tk.StringVar):
         path = filedialog.askopenfilename(filetypes=[("JSON files", "*.json"), ("All files", "*.*")])

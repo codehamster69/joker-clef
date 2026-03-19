@@ -10,7 +10,7 @@ from typing import Callable
 from .data import docs_by_id, load_json, save_json, to_qrel_map, zip_single_file
 from .features import humor_features
 from .fusion import build_candidates, rrf_fuse, weighted_fuse
-from .retriever import HybridTask1Retriever
+from .retriever import HybridTask1Retriever, RetrievedDoc
 
 ProgressFn = Callable[[str, float], None]
 DEFAULT_FUSION_WEIGHTS = {
@@ -184,7 +184,7 @@ def build_hybrid_predictions(
     for idx, query_row in enumerate(queries, start=1):
         qid = str(query_row["qid"])
         query_text = str(query_row["query"])
-        lexical_rows = lexical.rank(query_text, top_k=min(top_k, dense_top_k))
+        lexical_rows = lexical.rank(query_text, top_k=top_k)
         dense_rows = dense.rank(query_text, top_k=min(top_k, dense_top_k))
         fused_seed = rrf_fuse(lexical_rows, dense_rows)
         candidates = build_candidates(lexical_rows, dense_rows)
@@ -208,7 +208,9 @@ def build_hybrid_predictions(
 
         if humor_scorer and rerank_docs:
             humor_scores = humor_scorer.score_pairs(query_text, [text for _, text in rerank_docs], batch_size=max(4, batch_size // 2))
-            for (docid, _), score in zip(rerank_docs, humor_scores):
+            humor_rows = [RetrievedDoc(docid=docid, score=float(score)) for (docid, _), score in zip(rerank_docs, humor_scores)]
+            humor_map = {row.docid: row.score for row in HybridTask1Retriever.normalize_scores(humor_rows)}
+            for docid, score in humor_map.items():
                 if docid in candidates:
                     candidates[docid].humor_score = score
 

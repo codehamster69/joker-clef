@@ -50,8 +50,20 @@ class DenseEncoder:
             self._model = SentenceTransformer(self.model_name, **kwargs)
         return self._model
 
-    def encode_texts(self, texts: Iterable[str], progress: ProgressFn | None = None, progress_span: tuple[float, float] = (0.0, 1.0)) -> np.ndarray:
-        rows = list(texts)
+    def _prepare_text(self, text: str, *, is_query: bool) -> str:
+        model_key = self.model_name.lower()
+        stripped = text.strip()
+        if not stripped:
+            return stripped
+        if "e5" in model_key:
+            prefix = "query: " if is_query else "passage: "
+            return prefix + stripped
+        if "bge" in model_key and is_query:
+            return "Represent this sentence for searching relevant passages: " + stripped
+        return stripped
+
+    def encode_texts(self, texts: Iterable[str], progress: ProgressFn | None = None, progress_span: tuple[float, float] = (0.0, 1.0), *, is_query: bool = False) -> np.ndarray:
+        rows = [self._prepare_text(text, is_query=is_query) for text in texts]
         if not rows:
             return np.zeros((0, 0), dtype=np.float32)
         model = self._load_model()
@@ -124,7 +136,7 @@ class DenseRetriever:
         docids = [str(row["docid"]) for row in rows]
         if progress:
             progress(f"Preparing dense index for {len(docids)} documents...", 0.02)
-        embeddings = self.encoder.encode_texts(texts, progress=progress, progress_span=(0.08, 0.88))
+        embeddings = self.encoder.encode_texts(texts, progress=progress, progress_span=(0.08, 0.88), is_query=False)
         meta = {"model_name": self.model_name, "size": len(docids), "dim": int(embeddings.shape[1]) if len(docids) else 0}
         DenseIndex(self.artifacts).save(embeddings=embeddings, docids=docids, meta=meta, progress=progress)
         self.embeddings = embeddings
@@ -165,7 +177,7 @@ class DenseRetriever:
     def rank(self, query: str, top_k: int = 1000) -> list[RetrievedDoc]:
         if self.embeddings is None:
             raise RuntimeError("Dense index is not loaded.")
-        q_emb = self.encoder.encode_texts([query])
+        q_emb = self.encoder.encode_texts([query], is_query=True)
         query_vec = np.asarray(q_emb[0], dtype=np.float32)
         if self._faiss_index is not None:
             scores, indices = self._faiss_index.search(query_vec[None, :], min(top_k, len(self.docids)))

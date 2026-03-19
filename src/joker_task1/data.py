@@ -32,3 +32,11 @@ def to_qrel_map(qrels: Iterable[dict]) -> dict[str, set[str]]:
         qid = str(row["qid"])
         rel.setdefault(qid, set()).add(str(row["docid"]))
     return rel
+
+
+def docs_by_id(docs: Iterable[dict]) -> dict[str, dict]:
+    return {str(row["docid"]): row for row in docs}
+
+
+def queries_by_id(queries: Iterable[dict]) -> dict[str, dict]:
+    return {str(row["qid"]): row for row in queries}

@@ -472,6 +472,56 @@ def cmd_eval(args: argparse.Namespace) -> None:
     print(f"MAP@{args.k}: {score:.6f}")
 
 
+def cmd_compare_models(args: argparse.Namespace) -> None:
+    if not args.qrels:
+        raise ValueError("--qrels is required for model comparison")
+    model_names = [name.strip() for name in args.models if name and name.strip()]
+    if not model_names:
+        raise ValueError("Provide at least one model name in --models")
+
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    metrics: list[dict] = []
+    for model_name in model_names:
+        safe_name = "".join(ch.lower() if ch.isalnum() else "_" for ch in model_name).strip("_") or "model"
+        out_path = output_dir / f"comparison_{safe_name}.json"
+        run_id = f"{args.run_id}_{safe_name}"
+        rows = build_hybrid_predictions(
+            docs_path=args.docs,
+            queries_path=args.queries,
+            output_path=str(out_path),
+            run_id=run_id,
+            manual=args.manual,
+            qrels_path=args.qrels,
+            top_k=args.top_k,
+            dense_model=args.dense_model,
+            dense_index_dir=args.dense_index_dir,
+            dense_top_k=args.dense_top_k,
+            reranker_model=model_name,
+            rerank_top_n=args.rerank_top_n,
+            humor_model_dir=args.humor_model_dir,
+            device=args.device,
+            batch_size=args.batch_size,
+            fusion_config_path=args.fusion_config,
+        )
+        score = evaluate_predictions_file(str(out_path), args.qrels, args.top_k)
+        metrics.append(
+            {
+                "model": model_name,
+                "map_at_k": score,
+                "predictions_file": str(out_path),
+                "rows_written": len(rows),
+            }
+        )
+        print(f"{model_name}: MAP@{args.top_k}={score:.6f}")
+
+    metrics.sort(key=lambda row: row["map_at_k"], reverse=True)
+    Path(args.comparison_file).parent.mkdir(parents=True, exist_ok=True)
+    save_json(metrics, args.comparison_file)
+    print(f"Comparison file written to {args.comparison_file}")
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="JOKER CLEF 2025 Task 1 pipeline")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -554,6 +604,26 @@ def parser() -> argparse.ArgumentParser:
     pe.add_argument("--qrels", required=True)
     pe.add_argument("-k", type=int, default=1000)
     pe.set_defaults(func=cmd_eval)
+
+    pcm = sub.add_parser("compare-models", help="Compare multiple reranker models and write a summary JSON")
+    pcm.add_argument("--docs", required=True)
+    pcm.add_argument("--queries", required=True)
+    pcm.add_argument("--qrels", required=True)
+    pcm.add_argument("--output-dir", default="artifacts/model_comparisons")
+    pcm.add_argument("--comparison-file", default="artifacts/model_comparisons/model_comparison_metrics.json")
+    pcm.add_argument("--run-id", required=True)
+    pcm.add_argument("--manual", type=int, choices=[0, 1], default=0)
+    pcm.add_argument("--top-k", type=int, default=1000)
+    pcm.add_argument("--dense-model", default="BAAI/bge-small-en-v1.5")
+    pcm.add_argument("--dense-index-dir", default="artifacts/dense_index")
+    pcm.add_argument("--dense-top-k", type=int, default=700)
+    pcm.add_argument("--models", nargs="+", required=True, help="List of reranker model names to compare")
+    pcm.add_argument("--rerank-top-n", type=int, default=200)
+    pcm.add_argument("--humor-model-dir")
+    pcm.add_argument("--device", default=None)
+    pcm.add_argument("--batch-size", type=int, default=32)
+    pcm.add_argument("--fusion-config")
+    pcm.set_defaults(func=cmd_compare_models)
 
     return p
 

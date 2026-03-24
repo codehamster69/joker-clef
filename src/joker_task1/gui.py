@@ -5,10 +5,18 @@ import queue
 import subprocess
 import threading
 import tkinter as tk
+from datetime import datetime, timezone
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
+from time import perf_counter
 
-from .cli import build_hybrid_predictions, build_predictions, evaluate_predictions_file, map_at_k, tune_params
+from .cli import (
+    build_hybrid_predictions,
+    build_predictions,
+    evaluate_predictions_file,
+    map_at_k,
+    tune_params,
+)
 from .data import load_json, to_qrel_map, zip_single_file
 
 
@@ -52,6 +60,11 @@ class Task1Gui:
         self.learning_rate_var = tk.DoubleVar(value=2e-5)
         self.max_length_var = tk.IntVar(value=256)
         self.fusion_config_var = tk.StringVar(value="")
+        self.compare_models_var = tk.StringVar(value="camembert-base Qwen/Qwen3-Reranker-0.6B facebook/bart-base distilbert-base-uncased")
+        self.compare_output_dir_var = tk.StringVar(value="artifacts/model_comparisons")
+        self.compare_file_var = tk.StringVar(value="artifacts/model_comparisons/model_comparison_metrics.json")
+        self.auto_report_var = tk.BooleanVar(value=True)
+        self.report_path_var = tk.StringVar(value="artifacts/gui_reports/latest_run_report.json")
 
         self.status_var = tk.StringVar(value="Idle")
         self.resource_var = tk.StringVar(value="CPU: -- | RAM: -- | GPU: --")
@@ -102,6 +115,9 @@ class Task1Gui:
         add_file_row(paths, "Dense index directory", self.dense_index_dir_var, 7, directory=True)
         add_file_row(paths, "Humor model directory", self.humor_model_dir_var, 8, directory=True)
         add_file_row(paths, "Fusion config JSON", self.fusion_config_var, 9)
+        add_file_row(paths, "Comparison output dir", self.compare_output_dir_var, 10, directory=True)
+        add_file_row(paths, "Comparison summary JSON", self.compare_file_var, 11)
+        add_file_row(paths, "Auto report JSON", self.report_path_var, 12)
         paths.columnconfigure(1, weight=1)
 
         controls = ttk.LabelFrame(frm, text="Run controls", padding=10)
@@ -120,6 +136,7 @@ class Task1Gui:
         ttk.Checkbutton(opts, text="Manual run", variable=self.manual_var, onvalue=1, offvalue=0).pack(side="left", padx=4)
         ttk.Checkbutton(opts, text="Auto-tune lexical weights", variable=self.autotune_var).pack(side="left", padx=10)
         ttk.Checkbutton(opts, text="Evaluate after prediction", variable=self.eval_after_run_var).pack(side="left", padx=10)
+        ttk.Checkbutton(opts, text="Auto-save run report", variable=self.auto_report_var).pack(side="left", padx=10)
         ttk.Label(opts, text="Top-K").pack(side="left", padx=(12, 4))
         ttk.Spinbox(opts, from_=1, to=1000, textvariable=self.topk_var, width=7).pack(side="left")
 
@@ -155,6 +172,8 @@ class Task1Gui:
         btns.grid(row=4, column=0, sticky="w", pady=10)
         self.run_btn = ttk.Button(btns, text="Run Prediction", command=self.start_run)
         self.run_btn.pack(side="left", padx=4)
+        self.compare_btn = ttk.Button(btns, text="Compare Models", command=self.start_compare_models)
+        self.compare_btn.pack(side="left", padx=4)
         self.index_btn = ttk.Button(btns, text="Build Dense Index", command=self.start_build_dense)
         self.index_btn.pack(side="left", padx=4)
         self.train_btn = ttk.Button(btns, text="Train Humor Model", command=self.start_train_humor)
@@ -170,8 +189,14 @@ class Task1Gui:
         ttk.Button(eval_frame, text="Browse", command=lambda: self._browse_file(self.eval_pred_var)).grid(row=0, column=2)
         eval_frame.columnconfigure(1, weight=1)
 
+        compare_frame = ttk.LabelFrame(frm, text="Model comparison (reranker)", padding=10)
+        compare_frame.grid(row=6, column=0, sticky="we", pady=(10, 0))
+        ttk.Label(compare_frame, text="Models (space-separated)").grid(row=0, column=0, sticky="w")
+        ttk.Entry(compare_frame, textvariable=self.compare_models_var, width=100).grid(row=0, column=1, sticky="we", padx=6)
+        compare_frame.columnconfigure(1, weight=1)
+
         system = ttk.LabelFrame(frm, text="Execution status and resource usage", padding=10)
-        system.grid(row=6, column=0, sticky="we", pady=(10, 0))
+        system.grid(row=7, column=0, sticky="we", pady=(10, 0))
         self.progress = ttk.Progressbar(system, orient="horizontal", mode="determinate", maximum=100)
         self.progress.grid(row=0, column=0, sticky="we")
         ttk.Label(system, textvariable=self.status_var).grid(row=1, column=0, sticky="w", pady=(6, 0))
@@ -179,7 +204,7 @@ class Task1Gui:
         system.columnconfigure(0, weight=1)
 
         log_frame = ttk.LabelFrame(frm, text="Logger", padding=10)
-        log_frame.grid(row=7, column=0, sticky="nsew", pady=(10, 0))
+        log_frame.grid(row=8, column=0, sticky="nsew", pady=(10, 0))
         self.log = tk.Text(log_frame, height=24, wrap="word")
         self.log.grid(row=0, column=0, sticky="nsew")
         log_scroll = ttk.Scrollbar(log_frame, orient="vertical", command=self.log.yview)
@@ -189,7 +214,7 @@ class Task1Gui:
         log_frame.rowconfigure(0, weight=1)
 
         frm.columnconfigure(0, weight=1)
-        frm.rowconfigure(7, weight=1)
+        frm.rowconfigure(8, weight=1)
 
     def _on_frame_configure(self, _event=None):
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
@@ -224,6 +249,7 @@ class Task1Gui:
         state = "disabled" if running else "normal"
         self.run_btn.config(state=state)
         self.index_btn.config(state=state)
+        self.compare_btn.config(state=state)
         self.train_btn.config(state=state)
         self.eval_btn.config(state=state)
 
@@ -289,6 +315,18 @@ class Task1Gui:
             pass
         return f"{cpu_part} | {ram_part} | {gpu_part}"
 
+    def _write_run_report(self, payload: dict):
+        if not self.auto_report_var.get():
+            return
+        report_path = self.report_path_var.get().strip()
+        if not report_path:
+            return
+        path = Path(report_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+        self._emit("progress", f"Saved run report to {path}", 1.0)
+
     def clear_log(self):
         self.log.delete("1.0", "end")
 
@@ -351,6 +389,24 @@ class Task1Gui:
         self.progress["value"] = 0
         self.status_var.set("Building dense index...")
         threading.Thread(target=self._worker_build_dense, daemon=True).start()
+
+    def start_compare_models(self):
+        if self.running:
+            return
+        try:
+            self._validate_prediction_inputs()
+            model_names = [name.strip() for name in self.compare_models_var.get().split() if name.strip()]
+            if not model_names:
+                raise ValueError("Provide at least one model name for comparison.")
+            if not self.qrels_var.get():
+                raise ValueError("Qrels JSON is required to compare model MAP.")
+        except Exception as exc:
+            messagebox.showerror("Invalid input", str(exc))
+            return
+        self._set_running(True)
+        self.progress["value"] = 0
+        self.status_var.set("Comparing models...")
+        threading.Thread(target=self._worker_compare_models, daemon=True).start()
 
     def start_train_humor(self):
         if self.running:
@@ -440,6 +496,7 @@ class Task1Gui:
 
     def _worker_prediction(self):
         try:
+            t0 = perf_counter()
             params = None
             docs_path = self.docs_var.get()
             queries_path = self.queries_var.get()
@@ -517,9 +574,132 @@ class Task1Gui:
                 self._emit("progress", "Running post-prediction evaluation...", 0.99)
                 score = self._evaluate_map(output_path, qrels_path, self.topk_var.get())
                 self._emit("progress", f"MAP@{self.topk_var.get()} on selected data: {score:.6f}", 1.0)
+            else:
+                score = None
+
+            report = {
+                "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                "event": "predict",
+                "pipeline": self.pipeline_var.get(),
+                "duration_seconds": round(perf_counter() - t0, 4),
+                "inputs": {
+                    "docs": docs_path,
+                    "queries": queries_path,
+                    "qrels": qrels_path,
+                },
+                "outputs": {
+                    "predictions": output_path,
+                    "zip": zip_path or None,
+                    "rows_written": len(rows),
+                },
+                "evaluation": {
+                    "metric": f"MAP@{self.topk_var.get()}",
+                    "score": score,
+                },
+                "settings": {
+                    "run_id": self.run_id_var.get().strip(),
+                    "manual": self.manual_var.get(),
+                    "top_k": self.topk_var.get(),
+                    "dense_model": self.dense_model_var.get().strip(),
+                    "dense_index_dir": self.dense_index_dir_var.get().strip(),
+                    "dense_top_k": self.dense_topk_var.get(),
+                    "reranker_model": self.reranker_model_var.get().strip() or None,
+                    "rerank_top_n": self.rerank_topn_var.get(),
+                    "humor_model_dir": self.humor_model_dir_var.get().strip() or None,
+                    "device": self.device_var.get().strip() or None,
+                    "batch_size": self.batch_size_var.get(),
+                    "fusion_config_path": self.fusion_config_var.get().strip() or None,
+                    "auto_tune": self.autotune_var.get(),
+                },
+                "resource_snapshot": self.resource_var.get(),
+            }
+            self._write_run_report(report)
 
             self.eval_pred_var.set(output_path)
             self._emit("done", f"Completed successfully. Rows written: {len(rows)}")
+        except Exception as exc:
+            self._emit("error", str(exc))
+
+    def _worker_compare_models(self):
+        try:
+            t0 = perf_counter()
+            from .cli import cmd_compare_models, parser
+
+            args = parser().parse_args(
+                [
+                    "compare-models",
+                    "--docs",
+                    self.docs_var.get(),
+                    "--queries",
+                    self.queries_var.get(),
+                    "--qrels",
+                    self.qrels_var.get(),
+                    "--output-dir",
+                    self.compare_output_dir_var.get(),
+                    "--comparison-file",
+                    self.compare_file_var.get(),
+                    "--run-id",
+                    self.run_id_var.get().strip() or "team_task_1_model_compare",
+                    "--manual",
+                    str(self.manual_var.get()),
+                    "--top-k",
+                    str(self.topk_var.get()),
+                    "--dense-model",
+                    self.dense_model_var.get().strip(),
+                    "--dense-index-dir",
+                    self.dense_index_dir_var.get().strip(),
+                    "--dense-top-k",
+                    str(self.dense_topk_var.get()),
+                    "--rerank-top-n",
+                    str(self.rerank_topn_var.get()),
+                    "--device",
+                    self.device_var.get().strip(),
+                    "--batch-size",
+                    str(self.batch_size_var.get()),
+                    "--models",
+                    *[name.strip() for name in self.compare_models_var.get().split() if name.strip()],
+                ]
+            )
+
+            self._emit("progress", "Running model comparison (this may take a while)...", 0.05)
+            cmd_compare_models(args)
+            metrics = []
+            if Path(self.compare_file_var.get()).exists():
+                with Path(self.compare_file_var.get()).open("r", encoding="utf-8") as f:
+                    metrics = json.load(f)
+            report = {
+                "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                "event": "compare_models",
+                "duration_seconds": round(perf_counter() - t0, 4),
+                "inputs": {
+                    "docs": self.docs_var.get(),
+                    "queries": self.queries_var.get(),
+                    "qrels": self.qrels_var.get(),
+                },
+                "settings": {
+                    "run_id": self.run_id_var.get().strip() or "team_task_1_model_compare",
+                    "models": [name.strip() for name in self.compare_models_var.get().split() if name.strip()],
+                    "top_k": self.topk_var.get(),
+                    "dense_model": self.dense_model_var.get().strip(),
+                    "dense_index_dir": self.dense_index_dir_var.get().strip(),
+                    "dense_top_k": self.dense_topk_var.get(),
+                    "rerank_top_n": self.rerank_topn_var.get(),
+                    "device": self.device_var.get().strip() or None,
+                    "batch_size": self.batch_size_var.get(),
+                },
+                "outputs": {
+                    "comparison_file": self.compare_file_var.get(),
+                    "comparison_output_dir": self.compare_output_dir_var.get(),
+                    "metrics_count": len(metrics),
+                    "best_model": metrics[0]["model"] if metrics else None,
+                    "best_map_at_k": metrics[0]["map_at_k"] if metrics else None,
+                },
+                "metrics": metrics,
+                "resource_snapshot": self.resource_var.get(),
+            }
+            self._write_run_report(report)
+            self._emit("progress", f"Saved comparison file to {self.compare_file_var.get()}", 1.0)
+            self._emit("done", "Model comparison completed successfully.")
         except Exception as exc:
             self._emit("error", str(exc))
 

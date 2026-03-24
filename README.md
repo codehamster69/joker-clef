@@ -56,6 +56,8 @@ PYTHONPATH=src python -m joker_task1.gui
 - Save/load lexical parameter JSON files
 - Hybrid controls for dense model, reranker, humor model, fusion config, batch size, and device
 - Evaluate predictions (MAP@K) directly in GUI
+- Compare multiple reranker models from the GUI and save the MAP comparison as JSON
+- Auto-save structured GUI run reports (settings, outputs, timing, metrics) to JSON for experiment tracking
 - Live progress logs for indexing, tuning, ranking, and training
 - Live PC resource monitoring (CPU, RAM, and GPU/VRAM when `nvidia-smi` is available)
 
@@ -178,6 +180,29 @@ This writes ablation runs and `ablation_metrics.json` so you can compare:
 - lexical + dense
 - lexical + dense + reranker
 - full hybrid
+
+---
+
+## 6) Compare multiple reranker models and store results
+
+```bash
+PYTHONPATH=src python -m joker_task1.cli compare-models \
+  --docs joker_task1_retrieval_corpus25_EN.json \
+  --queries joker_task1_retrieval_queries_train25_EN.json \
+  --qrels joker_task1_retrieval_qrels_train25_EN.json \
+  --run-id YOURTEAM_task_1_model_compare \
+  --output-dir artifacts/model_comparisons \
+  --comparison-file artifacts/model_comparisons/model_comparison_metrics.json \
+  --dense-model BAAI/bge-small-en-v1.5 \
+  --dense-index-dir artifacts/dense_index \
+  --models camembert-base Qwen/Qwen3-Reranker-0.6B facebook/bart-base distilbert-base-uncased \
+  --rerank-top-n 200 \
+  --device cuda
+```
+
+This writes:
+- one prediction file per candidate model in `--output-dir`
+- one summary JSON (`--comparison-file`) sorted by MAP@K
 
 ---
 

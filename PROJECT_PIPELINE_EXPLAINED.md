@@ -1007,3 +1007,44 @@ Compared with very large-model pipelines, it is much more practical and reproduc
 So the current project is best understood as a **balanced research pipeline**:
 strong enough to be competitive, modular enough to analyze, and lightweight enough to improve iteratively.
 
+
+---
+
+## 16. Comparison with previous CLEF JOKER Task 1 systems (MAP@1000 on test data)
+
+This section places the **current repository pipeline** in context against previously published CLEF JOKER Task 1 results.
+
+### 16.1 Your current result (this repository)
+
+- **System**: current hybrid pipeline in this repository (lexical + dense + reranker + humor-aware fusion)
+- **Metric**: MAP@1000 on test data
+- **Score**: **0.24** (as you reported)
+
+### 16.2 Reference points from prior CLEF work
+
+From the official overview papers and team notebooks:
+
+- **CLEF 2024 Task 1 (English, official ranking with humour + topical relevance)**:
+  - In the official overview discussion, top-performing test runs are described as strong but still relatively low in this combined humour+relevance setting (roughly around the low 0.1 MAP range in their tables).
+- **CLEF 2025 Task 1 (English, test data)**:
+  - `pjmathematician` reports **MAP@1000 = 0.3501** on English test data in their CLEF 2025 notebook (with nearby English runs at 0.3486 and 0.3438).
+
+### 16.3 Side-by-side comparison
+
+| System / reference | Test metric | Score |
+|---|---:|---:|
+| **Your current pipeline (this repo)** | MAP@1000 | **0.24** |
+| CLEF 2024 strong official runs (official overview, test setting) | MAP | low 0.1 range |
+| CLEF 2025 top English run (`pjmathematician`) | MAP@1000 | 0.3501 |
+
+### 16.4 Interpretation
+
+- Your current pipeline at **0.24 MAP@1000** is **clearly above** the general 2024 official performance range discussed for the humour+relevance test setting.
+- Compared with the strongest published CLEF 2025 English run (**0.3501**), your system is **competitive but still behind SOTA by ~0.11 absolute MAP@1000**.
+- Practically, this suggests your architecture is already strong and likely needs targeted improvements (better reranker checkpoints, stronger humour-aware scoring, and fusion weight tuning) rather than a complete redesign.
+
+### 16.5 Sources
+
+- CLEF 2024 Task 1 overview paper: *Overview of the CLEF 2024 JOKER Task 1: Humour-aware Information Retrieval* (CEUR-WS Vol-3740) — https://ceur-ws.org/Vol-3740/paper-165.pdf
+- CLEF 2025 Task 1 overview volume (for context): CEUR-WS Vol-4038 — https://ceur-ws.org/Vol-4038/
+- Team notebook with explicit test MAP@1000 values: *pjmathematician at the CLEF 2025 JOKER Lab Tasks 1, 2 & 3* — https://ceur-ws.org/Vol-4038/paper_230.pdf

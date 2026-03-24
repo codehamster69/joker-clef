@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import itertools
 import json
 from pathlib import Path
@@ -472,6 +473,122 @@ def cmd_eval(args: argparse.Namespace) -> None:
     print(f"MAP@{args.k}: {score:.6f}")
 
 
+def cmd_compare_models(args: argparse.Namespace) -> None:
+    if not args.qrels:
+        raise ValueError("--qrels is required for model comparison")
+    model_names = [name.strip() for name in args.models if name and name.strip()]
+    if not model_names:
+        raise ValueError("Provide at least one model name in --models")
+
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    docs = load_json(args.docs)
+    queries = load_json(args.queries)
+    qrels = load_json(args.qrels)
+    rel_by_qid = to_qrel_map(qrels)
+    doc_map = docs_by_id(docs)
+
+    print("Preparing shared lexical and dense retrieval cache...")
+    lexical = HybridTask1Retriever()
+    lexical.fit(docs=docs, qrels=qrels)
+
+    from .dense import DenseRetriever
+    from .rerank import CrossEncoderReranker
+
+    dense = DenseRetriever(
+        model_name=args.dense_model,
+        index_dir=args.dense_index_dir,
+        device=args.device,
+        batch_size=args.batch_size,
+    )
+    dense.ensure_ready(docs=docs)
+
+    humor_scorer = None
+    if args.humor_model_dir:
+        from .humor_classifier import HumorPairScorer
+
+        humor_scorer = HumorPairScorer(model_dir=args.humor_model_dir, device=args.device)
+
+    fusion_weights = load_fusion_config(args.fusion_config)
+    query_cache: dict[str, dict] = {}
+    for q in queries:
+        qid = str(q["qid"])
+        query_text = str(q["query"])
+        lexical_rows = lexical.rank(query_text, top_k=args.top_k)
+        dense_rows = dense.rank(query_text, top_k=min(args.top_k, args.dense_top_k))
+        fused_seed = rrf_fuse(lexical_rows, dense_rows)
+        ranked_seed = sorted(fused_seed.items(), key=lambda item: item[1], reverse=True)
+        candidate_ids = [docid for docid, _ in ranked_seed[: max(args.rerank_top_n, 100)]]
+
+        candidates = build_candidates(lexical_rows, dense_rows)
+        for docid in candidate_ids:
+            if docid not in candidates:
+                continue
+            doc_text = str(doc_map[docid]["text"])
+            candidates[docid].feature_scores = humor_features(query_text, doc_text)
+
+        rerank_ids = candidate_ids[: args.rerank_top_n]
+        rerank_docs = [(docid, str(doc_map[docid]["text"])) for docid in rerank_ids]
+        if humor_scorer and rerank_docs:
+            humor_scores = humor_scorer.score_pairs(query_text, [text for _, text in rerank_docs], batch_size=max(4, args.batch_size // 2))
+            humor_rows = [RetrievedDoc(docid=docid, score=float(score)) for (docid, _), score in zip(rerank_docs, humor_scores)]
+            humor_map = {row.docid: row.score for row in HybridTask1Retriever.normalize_scores(humor_rows)}
+            for docid, score in humor_map.items():
+                if docid in candidates:
+                    candidates[docid].humor_score = score
+
+        query_cache[qid] = {"query_text": query_text, "candidates": candidates, "rerank_docs": rerank_docs}
+
+    metrics: list[dict] = []
+    for idx, model_name in enumerate(model_names, start=1):
+        safe_name = "".join(ch.lower() if ch.isalnum() else "_" for ch in model_name).strip("_") or "model"
+        out_path = output_dir / f"comparison_{safe_name}.json"
+        run_id = f"{args.run_id}_{safe_name}"
+        print(f"[{idx}/{len(model_names)}] Running reranker: {model_name}")
+        reranker = CrossEncoderReranker(
+            model_name=model_name,
+            device=args.device,
+            batch_size=max(4, args.batch_size // 2),
+        )
+
+        rankings: dict[str, list[RetrievedDoc]] = {}
+        for q in queries:
+            qid = str(q["qid"])
+            cached = query_cache[qid]
+            candidates = copy.deepcopy(cached["candidates"])
+            rerank_docs = cached["rerank_docs"]
+            if rerank_docs:
+                reranked = reranker.rerank(cached["query_text"], rerank_docs)
+                rerank_map = {row.docid: row.score for row in HybridTask1Retriever.normalize_scores(reranked)}
+                for docid, score in rerank_map.items():
+                    if docid in candidates:
+                        candidates[docid].rerank_score = score
+            rankings[qid] = weighted_fuse(candidates, fusion_weights, top_k=args.top_k)
+
+        rows = predictions_from_rankings(run_id, args.manual, queries, rankings)
+        save_json(rows, str(out_path))
+
+        pred_by_qid: dict[str, list[str]] = {}
+        for row in rows:
+            pred_by_qid.setdefault(str(row["qid"]), []).append(str(row["docid"]))
+        score = map_at_k(pred_by_qid, rel_by_qid, k=args.top_k)
+        metrics.append(
+            {
+                "model": model_name,
+                "map_at_k": score,
+                "predictions_file": str(out_path),
+                "rows_written": len(rows),
+            }
+        )
+        print(f"{model_name}: MAP@{args.top_k}={score:.6f}")
+
+    metrics.sort(key=lambda row: row["map_at_k"], reverse=True)
+    Path(args.comparison_file).parent.mkdir(parents=True, exist_ok=True)
+    save_json(metrics, args.comparison_file)
+    print(f"Comparison file written to {args.comparison_file}")
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="JOKER CLEF 2025 Task 1 pipeline")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -554,6 +671,26 @@ def parser() -> argparse.ArgumentParser:
     pe.add_argument("--qrels", required=True)
     pe.add_argument("-k", type=int, default=1000)
     pe.set_defaults(func=cmd_eval)
+
+    pcm = sub.add_parser("compare-models", help="Compare multiple reranker models and write a summary JSON")
+    pcm.add_argument("--docs", required=True)
+    pcm.add_argument("--queries", required=True)
+    pcm.add_argument("--qrels", required=True)
+    pcm.add_argument("--output-dir", default="artifacts/model_comparisons")
+    pcm.add_argument("--comparison-file", default="artifacts/model_comparisons/model_comparison_metrics.json")
+    pcm.add_argument("--run-id", required=True)
+    pcm.add_argument("--manual", type=int, choices=[0, 1], default=0)
+    pcm.add_argument("--top-k", type=int, default=1000)
+    pcm.add_argument("--dense-model", default="BAAI/bge-small-en-v1.5")
+    pcm.add_argument("--dense-index-dir", default="artifacts/dense_index")
+    pcm.add_argument("--dense-top-k", type=int, default=700)
+    pcm.add_argument("--models", nargs="+", required=True, help="List of reranker model names to compare")
+    pcm.add_argument("--rerank-top-n", type=int, default=200)
+    pcm.add_argument("--humor-model-dir")
+    pcm.add_argument("--device", default="cuda")
+    pcm.add_argument("--batch-size", type=int, default=32)
+    pcm.add_argument("--fusion-config")
+    pcm.set_defaults(func=cmd_compare_models)
 
     return p
 

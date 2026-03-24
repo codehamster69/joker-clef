@@ -8,7 +8,13 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from .cli import build_hybrid_predictions, build_predictions, evaluate_predictions_file, map_at_k, tune_params
+from .cli import (
+    build_hybrid_predictions,
+    build_predictions,
+    evaluate_predictions_file,
+    map_at_k,
+    tune_params,
+)
 from .data import load_json, to_qrel_map, zip_single_file
 
 
@@ -52,6 +58,9 @@ class Task1Gui:
         self.learning_rate_var = tk.DoubleVar(value=2e-5)
         self.max_length_var = tk.IntVar(value=256)
         self.fusion_config_var = tk.StringVar(value="")
+        self.compare_models_var = tk.StringVar(value="camembert-base Qwen/Qwen3-Reranker-0.6B facebook/bart-base distilbert-base-uncased")
+        self.compare_output_dir_var = tk.StringVar(value="artifacts/model_comparisons")
+        self.compare_file_var = tk.StringVar(value="artifacts/model_comparisons/model_comparison_metrics.json")
 
         self.status_var = tk.StringVar(value="Idle")
         self.resource_var = tk.StringVar(value="CPU: -- | RAM: -- | GPU: --")
@@ -102,6 +111,8 @@ class Task1Gui:
         add_file_row(paths, "Dense index directory", self.dense_index_dir_var, 7, directory=True)
         add_file_row(paths, "Humor model directory", self.humor_model_dir_var, 8, directory=True)
         add_file_row(paths, "Fusion config JSON", self.fusion_config_var, 9)
+        add_file_row(paths, "Comparison output dir", self.compare_output_dir_var, 10, directory=True)
+        add_file_row(paths, "Comparison summary JSON", self.compare_file_var, 11)
         paths.columnconfigure(1, weight=1)
 
         controls = ttk.LabelFrame(frm, text="Run controls", padding=10)
@@ -155,6 +166,8 @@ class Task1Gui:
         btns.grid(row=4, column=0, sticky="w", pady=10)
         self.run_btn = ttk.Button(btns, text="Run Prediction", command=self.start_run)
         self.run_btn.pack(side="left", padx=4)
+        self.compare_btn = ttk.Button(btns, text="Compare Models", command=self.start_compare_models)
+        self.compare_btn.pack(side="left", padx=4)
         self.index_btn = ttk.Button(btns, text="Build Dense Index", command=self.start_build_dense)
         self.index_btn.pack(side="left", padx=4)
         self.train_btn = ttk.Button(btns, text="Train Humor Model", command=self.start_train_humor)
@@ -170,8 +183,14 @@ class Task1Gui:
         ttk.Button(eval_frame, text="Browse", command=lambda: self._browse_file(self.eval_pred_var)).grid(row=0, column=2)
         eval_frame.columnconfigure(1, weight=1)
 
+        compare_frame = ttk.LabelFrame(frm, text="Model comparison (reranker)", padding=10)
+        compare_frame.grid(row=6, column=0, sticky="we", pady=(10, 0))
+        ttk.Label(compare_frame, text="Models (space-separated)").grid(row=0, column=0, sticky="w")
+        ttk.Entry(compare_frame, textvariable=self.compare_models_var, width=100).grid(row=0, column=1, sticky="we", padx=6)
+        compare_frame.columnconfigure(1, weight=1)
+
         system = ttk.LabelFrame(frm, text="Execution status and resource usage", padding=10)
-        system.grid(row=6, column=0, sticky="we", pady=(10, 0))
+        system.grid(row=7, column=0, sticky="we", pady=(10, 0))
         self.progress = ttk.Progressbar(system, orient="horizontal", mode="determinate", maximum=100)
         self.progress.grid(row=0, column=0, sticky="we")
         ttk.Label(system, textvariable=self.status_var).grid(row=1, column=0, sticky="w", pady=(6, 0))
@@ -179,7 +198,7 @@ class Task1Gui:
         system.columnconfigure(0, weight=1)
 
         log_frame = ttk.LabelFrame(frm, text="Logger", padding=10)
-        log_frame.grid(row=7, column=0, sticky="nsew", pady=(10, 0))
+        log_frame.grid(row=8, column=0, sticky="nsew", pady=(10, 0))
         self.log = tk.Text(log_frame, height=24, wrap="word")
         self.log.grid(row=0, column=0, sticky="nsew")
         log_scroll = ttk.Scrollbar(log_frame, orient="vertical", command=self.log.yview)
@@ -189,7 +208,7 @@ class Task1Gui:
         log_frame.rowconfigure(0, weight=1)
 
         frm.columnconfigure(0, weight=1)
-        frm.rowconfigure(7, weight=1)
+        frm.rowconfigure(8, weight=1)
 
     def _on_frame_configure(self, _event=None):
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
@@ -224,6 +243,7 @@ class Task1Gui:
         state = "disabled" if running else "normal"
         self.run_btn.config(state=state)
         self.index_btn.config(state=state)
+        self.compare_btn.config(state=state)
         self.train_btn.config(state=state)
         self.eval_btn.config(state=state)
 
@@ -351,6 +371,24 @@ class Task1Gui:
         self.progress["value"] = 0
         self.status_var.set("Building dense index...")
         threading.Thread(target=self._worker_build_dense, daemon=True).start()
+
+    def start_compare_models(self):
+        if self.running:
+            return
+        try:
+            self._validate_prediction_inputs()
+            model_names = [name.strip() for name in self.compare_models_var.get().split() if name.strip()]
+            if not model_names:
+                raise ValueError("Provide at least one model name for comparison.")
+            if not self.qrels_var.get():
+                raise ValueError("Qrels JSON is required to compare model MAP.")
+        except Exception as exc:
+            messagebox.showerror("Invalid input", str(exc))
+            return
+        self._set_running(True)
+        self.progress["value"] = 0
+        self.status_var.set("Comparing models...")
+        threading.Thread(target=self._worker_compare_models, daemon=True).start()
 
     def start_train_humor(self):
         if self.running:
@@ -520,6 +558,53 @@ class Task1Gui:
 
             self.eval_pred_var.set(output_path)
             self._emit("done", f"Completed successfully. Rows written: {len(rows)}")
+        except Exception as exc:
+            self._emit("error", str(exc))
+
+    def _worker_compare_models(self):
+        try:
+            from .cli import cmd_compare_models, parser
+
+            args = parser().parse_args(
+                [
+                    "compare-models",
+                    "--docs",
+                    self.docs_var.get(),
+                    "--queries",
+                    self.queries_var.get(),
+                    "--qrels",
+                    self.qrels_var.get(),
+                    "--output-dir",
+                    self.compare_output_dir_var.get(),
+                    "--comparison-file",
+                    self.compare_file_var.get(),
+                    "--run-id",
+                    self.run_id_var.get().strip() or "team_task_1_model_compare",
+                    "--manual",
+                    str(self.manual_var.get()),
+                    "--top-k",
+                    str(self.topk_var.get()),
+                    "--dense-model",
+                    self.dense_model_var.get().strip(),
+                    "--dense-index-dir",
+                    self.dense_index_dir_var.get().strip(),
+                    "--dense-top-k",
+                    str(self.dense_topk_var.get()),
+                    "--rerank-top-n",
+                    str(self.rerank_topn_var.get()),
+                    "--device",
+                    self.device_var.get().strip(),
+                    "--batch-size",
+                    str(self.batch_size_var.get()),
+                    "--models",
+                    *[name.strip() for name in self.compare_models_var.get().split() if name.strip()],
+                ]
+            )
+
+            self._emit("progress", "Running model comparison (this may take a while)...", 0.05)
+            cmd_compare_models(args)
+            self._emit("progress", f"Saved comparison file to {self.compare_file_var.get()}", 1.0)
+            self._emit("done", "Model comparison completed successfully.")
         except Exception as exc:
             self._emit("error", str(exc))
 

@@ -18,6 +18,20 @@ class CrossEncoderReranker:
             if self.device:
                 kwargs["device"] = self.device
             self._model = CrossEncoder(self.model_name, **kwargs)
+            tokenizer = getattr(self._model, "tokenizer", None)
+            model = getattr(self._model, "model", None)
+            if tokenizer is not None and tokenizer.pad_token is None:
+                if tokenizer.eos_token is not None:
+                    tokenizer.pad_token = tokenizer.eos_token
+                elif tokenizer.sep_token is not None:
+                    tokenizer.pad_token = tokenizer.sep_token
+                elif tokenizer.cls_token is not None:
+                    tokenizer.pad_token = tokenizer.cls_token
+                elif tokenizer.unk_token is not None:
+                    tokenizer.pad_token = tokenizer.unk_token
+            if tokenizer is not None and model is not None and getattr(model.config, "pad_token_id", None) is None:
+                if getattr(tokenizer, "pad_token_id", None) is not None:
+                    model.config.pad_token_id = tokenizer.pad_token_id
         return self._model
 
     def score_pairs(self, query: str, docs: list[str]) -> list[float]:

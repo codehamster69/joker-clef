@@ -57,6 +57,7 @@ PYTHONPATH=src python -m joker_task1.gui
 - Hybrid controls for dense model, reranker, humor model, fusion config, batch size, and device
 - Evaluate predictions (MAP@K) directly in GUI
 - Compare multiple reranker models from the GUI and save the MAP comparison as JSON
+- Auto-save structured GUI run reports (settings, outputs, timing, metrics) to JSON for experiment tracking
 - Live progress logs for indexing, tuning, ranking, and training
 - Live PC resource monitoring (CPU, RAM, and GPU/VRAM when `nvidia-smi` is available)
 

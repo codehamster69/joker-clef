@@ -16,6 +16,7 @@ from .cli import (
     evaluate_predictions_file,
     map_at_k,
     tune_params,
+    all_metrics,
 )
 from .data import load_json, to_qrel_map, zip_single_file
 
@@ -47,7 +48,7 @@ class Task1Gui:
         self.pipeline_var = tk.StringVar(value="hybrid")
         self.device_var = tk.StringVar(value="cuda")
         self.batch_size_var = tk.IntVar(value=32)
-        self.dense_model_var = tk.StringVar(value="BAAI/bge-small-en-v1.5")
+        self.dense_model_var = tk.StringVar(value="BAAI/bge-base-en-v1.5")
         self.dense_index_dir_var = tk.StringVar(value="artifacts/dense_index")
         self.dense_topk_var = tk.IntVar(value=700)
         self.reranker_model_var = tk.StringVar(value="cross-encoder/ms-marco-MiniLM-L12-v2")
@@ -65,6 +66,17 @@ class Task1Gui:
         self.compare_file_var = tk.StringVar(value="artifacts/model_comparisons/model_comparison_metrics.json")
         self.auto_report_var = tk.BooleanVar(value=True)
         self.report_path_var = tk.StringVar(value="artifacts/gui_reports/latest_run_report.json")
+
+        # LTR / XGBoost settings
+        self.use_ltr_var = tk.BooleanVar(value=False)
+        self.ltr_model_var = tk.StringVar(value="artifacts/ltr_model.pkl")
+        self.ltr_depth_var = tk.IntVar(value=3)
+        self.ltr_trees_var = tk.IntVar(value=100)
+
+        # PRF settings
+        self.use_prf_var = tk.BooleanVar(value=False)
+        self.prf_k_var = tk.IntVar(value=10)
+        self.prf_terms_var = tk.IntVar(value=15)
 
         self.status_var = tk.StringVar(value="Idle")
         self.resource_var = tk.StringVar(value="CPU: -- | RAM: -- | GPU: --")
@@ -152,8 +164,27 @@ class Task1Gui:
         ttk.Spinbox(hybrid, from_=10, to=1000, textvariable=self.rerank_topn_var, width=8).grid(row=1, column=3, sticky="w", padx=4)
         hybrid.columnconfigure(1, weight=1)
 
+        ltr_frame = ttk.LabelFrame(frm, text="XGBoost L2R / Adaptive weights", padding=10)
+        ltr_frame.grid(row=3, column=0, sticky="we", pady=(10, 0))
+        ttk.Checkbutton(ltr_frame, text="Use XGBoost L2R scoring (overrides static weights)", variable=self.use_ltr_var).grid(row=0, column=0, columnspan=4, sticky="w")
+        add_file_row(ltr_frame, "LTR model (.pkl)", self.ltr_model_var, 1)
+        ttk.Label(ltr_frame, text="Max depth").grid(row=2, column=0, sticky="w")
+        ttk.Spinbox(ltr_frame, from_=2, to=8, textvariable=self.ltr_depth_var, width=6).grid(row=2, column=1, sticky="w", padx=4)
+        ttk.Label(ltr_frame, text="N estimators").grid(row=2, column=2, sticky="w", padx=(12, 0))
+        ttk.Spinbox(ltr_frame, from_=50, to=500, textvariable=self.ltr_trees_var, width=8).grid(row=2, column=3, sticky="w", padx=4)
+        self.ltr_train_btn = ttk.Button(ltr_frame, text="Train LTR Model", command=self.start_train_ltr)
+        self.ltr_train_btn.grid(row=3, column=0, columnspan=4, sticky="w", pady=(6, 0))
+
+        prf_frame = ttk.LabelFrame(frm, text="Pseudo-Relevance Feedback (PRF)", padding=10)
+        prf_frame.grid(row=4, column=0, sticky="we", pady=(10, 0))
+        ttk.Checkbutton(prf_frame, text="Enable PRF query expansion (RM3)", variable=self.use_prf_var).grid(row=0, column=0, columnspan=4, sticky="w")
+        ttk.Label(prf_frame, text="Feedback docs (K)").grid(row=1, column=0, sticky="w")
+        ttk.Spinbox(prf_frame, from_=3, to=50, textvariable=self.prf_k_var, width=6).grid(row=1, column=1, sticky="w", padx=4)
+        ttk.Label(prf_frame, text="Expansion terms").grid(row=1, column=2, sticky="w", padx=(12, 0))
+        ttk.Spinbox(prf_frame, from_=5, to=50, textvariable=self.prf_terms_var, width=6).grid(row=1, column=3, sticky="w", padx=4)
+
         training = ttk.LabelFrame(frm, text="Humor model training", padding=10)
-        training.grid(row=3, column=0, sticky="we", pady=(10, 0))
+        training.grid(row=5, column=0, sticky="we", pady=(10, 0))
         ttk.Label(training, text="Train model").grid(row=0, column=0, sticky="w")
         ttk.Entry(training, textvariable=self.humor_train_model_var, width=36).grid(row=0, column=1, sticky="we", padx=4)
         ttk.Label(training, text="Epochs").grid(row=0, column=2, sticky="w", padx=(12, 0))
@@ -169,7 +200,7 @@ class Task1Gui:
         training.columnconfigure(1, weight=1)
 
         btns = ttk.Frame(frm)
-        btns.grid(row=4, column=0, sticky="w", pady=10)
+        btns.grid(row=6, column=0, sticky="w", pady=10)
         self.run_btn = ttk.Button(btns, text="Run Prediction", command=self.start_run)
         self.run_btn.pack(side="left", padx=4)
         self.compare_btn = ttk.Button(btns, text="Compare Models", command=self.start_compare_models)
@@ -183,20 +214,20 @@ class Task1Gui:
         ttk.Button(btns, text="Clear Log", command=self.clear_log).pack(side="left", padx=4)
 
         eval_frame = ttk.Frame(frm)
-        eval_frame.grid(row=5, column=0, sticky="we")
+        eval_frame.grid(row=7, column=0, sticky="we")
         ttk.Label(eval_frame, text="Prediction file to evaluate").grid(row=0, column=0, sticky="w", pady=4)
         ttk.Entry(eval_frame, textvariable=self.eval_pred_var, width=100).grid(row=0, column=1, sticky="we", padx=6)
         ttk.Button(eval_frame, text="Browse", command=lambda: self._browse_file(self.eval_pred_var)).grid(row=0, column=2)
         eval_frame.columnconfigure(1, weight=1)
 
         compare_frame = ttk.LabelFrame(frm, text="Model comparison (reranker)", padding=10)
-        compare_frame.grid(row=6, column=0, sticky="we", pady=(10, 0))
+        compare_frame.grid(row=8, column=0, sticky="we", pady=(10, 0))
         ttk.Label(compare_frame, text="Models (space-separated)").grid(row=0, column=0, sticky="w")
         ttk.Entry(compare_frame, textvariable=self.compare_models_var, width=100).grid(row=0, column=1, sticky="we", padx=6)
         compare_frame.columnconfigure(1, weight=1)
 
         system = ttk.LabelFrame(frm, text="Execution status and resource usage", padding=10)
-        system.grid(row=7, column=0, sticky="we", pady=(10, 0))
+        system.grid(row=9, column=0, sticky="we", pady=(10, 0))
         self.progress = ttk.Progressbar(system, orient="horizontal", mode="determinate", maximum=100)
         self.progress.grid(row=0, column=0, sticky="we")
         ttk.Label(system, textvariable=self.status_var).grid(row=1, column=0, sticky="w", pady=(6, 0))
@@ -204,7 +235,7 @@ class Task1Gui:
         system.columnconfigure(0, weight=1)
 
         log_frame = ttk.LabelFrame(frm, text="Logger", padding=10)
-        log_frame.grid(row=8, column=0, sticky="nsew", pady=(10, 0))
+        log_frame.grid(row=10, column=0, sticky="nsew", pady=(10, 0))
         self.log = tk.Text(log_frame, height=24, wrap="word")
         self.log.grid(row=0, column=0, sticky="nsew")
         log_scroll = ttk.Scrollbar(log_frame, orient="vertical", command=self.log.yview)
@@ -214,7 +245,7 @@ class Task1Gui:
         log_frame.rowconfigure(0, weight=1)
 
         frm.columnconfigure(0, weight=1)
-        frm.rowconfigure(8, weight=1)
+        frm.rowconfigure(10, weight=1)
 
     def _on_frame_configure(self, _event=None):
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
@@ -252,6 +283,7 @@ class Task1Gui:
         self.compare_btn.config(state=state)
         self.train_btn.config(state=state)
         self.eval_btn.config(state=state)
+        self.ltr_train_btn.config(state=state)
 
     def _poll_events(self):
         try:
@@ -434,21 +466,63 @@ class Task1Gui:
         self.status_var.set("Evaluating...")
         threading.Thread(target=self._worker_eval_only, daemon=True).start()
 
-    def _evaluate_map(self, pred_path: str, qrels_path: str, k: int) -> float:
-        predictions = load_json(pred_path)
-        qrels = load_json(qrels_path)
-        rel_by_qid = to_qrel_map(qrels)
-        pred_by_qid: dict[str, list[str]] = {}
-        for row in predictions:
-            pred_by_qid.setdefault(str(row["qid"]), []).append(str(row["docid"]))
-        return map_at_k(pred_by_qid, rel_by_qid, k=k)
+    def start_train_ltr(self):
+        if self.running:
+            return
+        try:
+            if not Path(self.docs_var.get()).exists():
+                raise ValueError("Corpus JSON path is invalid.")
+            if not Path(self.queries_var.get()).exists():
+                raise ValueError("Queries JSON path is invalid.")
+            if not self.qrels_var.get() or not Path(self.qrels_var.get()).exists():
+                raise ValueError("Qrels JSON is required for LTR training.")
+        except Exception as exc:
+            messagebox.showerror("Invalid input", str(exc))
+            return
+        self._set_running(True)
+        self.progress["value"] = 0
+        self.status_var.set("Training LTR model...")
+        threading.Thread(target=self._worker_train_ltr, daemon=True).start()
+
+    def _evaluate_all(self, pred_path: str, qrels_path: str, k: int) -> dict:
+        return evaluate_predictions_file(pred_path, qrels_path, k)
+
+    def _worker_train_ltr(self):
+        try:
+            from .cli import cmd_train_ltr, parser as _parser
+            args = _parser().parse_args([
+                "train-ltr",
+                "--docs", self.docs_var.get(),
+                "--queries", self.queries_var.get(),
+                "--qrels", self.qrels_var.get(),
+                "--output", self.ltr_model_var.get().strip() or "artifacts/ltr_model.pkl",
+                "--dense-model", self.dense_model_var.get().strip(),
+                "--dense-index-dir", self.dense_index_dir_var.get().strip(),
+                "--rerank-top-n", str(self.rerank_topn_var.get()),
+                "--device", self.device_var.get().strip(),
+                "--batch-size", str(self.batch_size_var.get()),
+                "--top-k", str(self.topk_var.get()),
+                "--max-depth", str(self.ltr_depth_var.get()),
+                "--n-estimators", str(self.ltr_trees_var.get()),
+            ] + (["--reranker-model", self.reranker_model_var.get().strip()]
+                 if self.reranker_model_var.get().strip() else [])
+              + (["--humor-model-dir", self.humor_model_dir_var.get().strip()]
+                 if self.humor_model_dir_var.get().strip() else []))
+            self._emit("progress", "Building candidate features for LTR training...", 0.05)
+            cmd_train_ltr(args)
+            out = self.ltr_model_var.get().strip() or "artifacts/ltr_model.pkl"
+            self._emit("done", f"LTR model trained and saved to {out}")
+        except Exception as exc:
+            self._emit("error", str(exc))
 
     def _worker_eval_only(self):
         try:
             self._emit("progress", "Evaluating predictions...", 0.2)
-            score = evaluate_predictions_file(self.eval_pred_var.get(), self.qrels_var.get(), self.topk_var.get())
-            self._emit("progress", f"MAP@{self.topk_var.get()}: {score:.6f}", 1.0)
-            self._emit("done", f"Evaluation complete. MAP@{self.topk_var.get()} = {score:.6f}")
+            metrics = evaluate_predictions_file(self.eval_pred_var.get(), self.qrels_var.get(), self.topk_var.get())
+            for name, val in metrics.items():
+                self._emit("progress", f"{name}: {val:.6f}", 0.9)
+            summary = " | ".join(f"{k}={v:.4f}" for k, v in metrics.items())
+            self._emit("done", f"Evaluation complete. {summary}")
         except Exception as exc:
             self._emit("error", str(exc))
 
@@ -545,6 +619,7 @@ class Task1Gui:
                     progress=lambda msg, p: self._emit("progress", msg, p),
                 )
             else:
+                ltr_path = self.ltr_model_var.get().strip() if self.use_ltr_var.get() else None
                 rows = build_hybrid_predictions(
                     docs_path=docs_path,
                     queries_path=queries_path,
@@ -563,6 +638,10 @@ class Task1Gui:
                     device=self.device_var.get().strip() or None,
                     batch_size=self.batch_size_var.get(),
                     fusion_config_path=self.fusion_config_var.get().strip() or None,
+                    ltr_model_path=ltr_path,
+                    use_prf=self.use_prf_var.get(),
+                    prf_k=self.prf_k_var.get(),
+                    prf_terms=self.prf_terms_var.get(),
                     progress=lambda msg, p: self._emit("progress", msg, p),
                 )
 
@@ -570,12 +649,12 @@ class Task1Gui:
                 zip_single_file(output_path, zip_path, arcname="prediction.json")
                 self._emit("progress", f"Created zip: {zip_path}", 0.98)
 
+            eval_metrics = None
             if self.eval_after_run_var.get() and qrels_path:
                 self._emit("progress", "Running post-prediction evaluation...", 0.99)
-                score = self._evaluate_map(output_path, qrels_path, self.topk_var.get())
-                self._emit("progress", f"MAP@{self.topk_var.get()} on selected data: {score:.6f}", 1.0)
-            else:
-                score = None
+                eval_metrics = self._evaluate_all(output_path, qrels_path, self.topk_var.get())
+                for name, val in eval_metrics.items():
+                    self._emit("progress", f"{name}: {val:.6f}", 1.0)
 
             report = {
                 "timestamp_utc": datetime.now(timezone.utc).isoformat(),
@@ -592,10 +671,7 @@ class Task1Gui:
                     "zip": zip_path or None,
                     "rows_written": len(rows),
                 },
-                "evaluation": {
-                    "metric": f"MAP@{self.topk_var.get()}",
-                    "score": score,
-                },
+                "evaluation": eval_metrics,
                 "settings": {
                     "run_id": self.run_id_var.get().strip(),
                     "manual": self.manual_var.get(),
@@ -610,6 +686,11 @@ class Task1Gui:
                     "batch_size": self.batch_size_var.get(),
                     "fusion_config_path": self.fusion_config_var.get().strip() or None,
                     "auto_tune": self.autotune_var.get(),
+                    "use_ltr": self.use_ltr_var.get(),
+                    "ltr_model": self.ltr_model_var.get().strip() or None,
+                    "use_prf": self.use_prf_var.get(),
+                    "prf_k": self.prf_k_var.get(),
+                    "prf_terms": self.prf_terms_var.get(),
                 },
                 "resource_snapshot": self.resource_var.get(),
             }

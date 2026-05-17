@@ -186,3 +186,58 @@ class HybridTask1Retriever:
         if max_score == min_score:
             return [RetrievedDoc(docid=r.docid, score=1.0) for r in rows]
         return [RetrievedDoc(docid=r.docid, score=(r.score - min_score) / (max_score - min_score)) for r in rows]
+
+    def rm3_expand(
+        self,
+        query: str,
+        initial_results: list[RetrievedDoc],
+        top_k_docs: int = 10,
+        top_t_terms: int = 15,
+        alpha: float = 0.6,
+    ) -> str:
+        """Rocchio/RM3 pseudo-relevance feedback: returns an expanded query string.
+
+        Extracts the top-T highest-IDF terms from the top-K initial results
+        and appends them to the original query (weighted by alpha for original
+        terms). The caller re-ranks with the expanded query string.
+        """
+        feedback_docs = [r.docid for r in initial_results[:top_k_docs]
+                         if r.docid in self.term_freqs]
+        if not feedback_docs:
+            return query
+
+        # Accumulate term weights across feedback docs using IDF weighting
+        term_score: Counter[str] = Counter()
+        for docid in feedback_docs:
+            tf = self.term_freqs[docid]
+            dl = max(self.doc_lens[docid], 1)
+            for term, count in tf.items():
+                if len(term) < 3:
+                    continue
+                idf = self.idf.get(term, 0.0)
+                term_score[term] += idf * (count / dl)
+
+        # Remove original query tokens (they stay via alpha weighting)
+        orig_tokens = set(self.tokenize(query))
+        for t in orig_tokens:
+            term_score.pop(t, None)
+
+        expansion_terms = [t for t, _ in term_score.most_common(top_t_terms)]
+
+        # Build expanded query: repeat original query alpha-times, add expansion
+        orig_repeat = max(1, round(alpha * top_t_terms))
+        expanded_tokens = (self.tokenize(query) * orig_repeat) + expansion_terms
+        return " ".join(expanded_tokens)
+
+    def rank_with_prf(
+        self,
+        query: str,
+        top_k: int = 1000,
+        prf_k: int = 10,
+        prf_terms: int = 15,
+    ) -> list[RetrievedDoc]:
+        """Two-stage retrieval: rank → PRF expand → re-rank."""
+        initial = self.rank(query, top_k=max(top_k, 100))
+        expanded_query = self.rm3_expand(query, initial,
+                                         top_k_docs=prf_k, top_t_terms=prf_terms)
+        return self.rank(expanded_query, top_k=top_k)

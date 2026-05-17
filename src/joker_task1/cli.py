@@ -48,6 +48,79 @@ def map_at_k(pred_by_qid: dict[str, list[str]], rel_by_qid: dict[str, set[str]],
     return sum(aps) / len(aps) if aps else 0.0
 
 
+def ndcg_at_k(pred_by_qid: dict[str, list[str]], rel_by_qid: dict[str, set[str]], k: int = 1000) -> float:
+    import math as _math
+    ndcgs: list[float] = []
+    for qid, rel_set in rel_by_qid.items():
+        preds = pred_by_qid.get(qid, [])[:k]
+        if not rel_set:
+            continue
+        dcg = sum(1.0 / _math.log2(i + 1) for i, d in enumerate(preds, start=1) if d in rel_set)
+        ideal = sum(1.0 / _math.log2(i + 1) for i in range(1, min(len(rel_set), k) + 1))
+        ndcgs.append(dcg / ideal if ideal > 0 else 0.0)
+    return sum(ndcgs) / len(ndcgs) if ndcgs else 0.0
+
+
+def mrr(pred_by_qid: dict[str, list[str]], rel_by_qid: dict[str, set[str]], k: int = 1000) -> float:
+    rrs: list[float] = []
+    for qid, rel_set in rel_by_qid.items():
+        preds = pred_by_qid.get(qid, [])[:k]
+        if not rel_set:
+            continue
+        rr = 0.0
+        for i, docid in enumerate(preds, start=1):
+            if docid in rel_set:
+                rr = 1.0 / i
+                break
+        rrs.append(rr)
+    return sum(rrs) / len(rrs) if rrs else 0.0
+
+
+def recall_at_k(pred_by_qid: dict[str, list[str]], rel_by_qid: dict[str, set[str]], k: int = 1000) -> float:
+    recalls: list[float] = []
+    for qid, rel_set in rel_by_qid.items():
+        preds = pred_by_qid.get(qid, [])[:k]
+        if not rel_set:
+            continue
+        hits = sum(1 for d in preds if d in rel_set)
+        recalls.append(hits / len(rel_set))
+    return sum(recalls) / len(recalls) if recalls else 0.0
+
+
+def precision_at_k(pred_by_qid: dict[str, list[str]], rel_by_qid: dict[str, set[str]], k: int = 10) -> float:
+    ps: list[float] = []
+    for qid, rel_set in rel_by_qid.items():
+        preds = pred_by_qid.get(qid, [])[:k]
+        if not rel_set:
+            continue
+        hits = sum(1 for d in preds if d in rel_set)
+        ps.append(hits / max(len(preds), 1))
+    return sum(ps) / len(ps) if ps else 0.0
+
+
+def r_precision(pred_by_qid: dict[str, list[str]], rel_by_qid: dict[str, set[str]]) -> float:
+    ps: list[float] = []
+    for qid, rel_set in rel_by_qid.items():
+        r = len(rel_set)
+        preds = pred_by_qid.get(qid, [])[:r]
+        if not rel_set:
+            continue
+        hits = sum(1 for d in preds if d in rel_set)
+        ps.append(hits / r)
+    return sum(ps) / len(ps) if ps else 0.0
+
+
+def all_metrics(pred_by_qid: dict[str, list[str]], rel_by_qid: dict[str, set[str]], k: int = 1000) -> dict[str, float]:
+    return {
+        f"MAP@{k}": map_at_k(pred_by_qid, rel_by_qid, k),
+        f"NDCG@{k}": ndcg_at_k(pred_by_qid, rel_by_qid, k),
+        "MRR": mrr(pred_by_qid, rel_by_qid, k),
+        f"Recall@{k}": recall_at_k(pred_by_qid, rel_by_qid, k),
+        "P@10": precision_at_k(pred_by_qid, rel_by_qid, 10),
+        "R-Precision": r_precision(pred_by_qid, rel_by_qid),
+    }
+
+
 def split_qrels_by_query(qrels: list[dict], valid_ratio: float = 0.2, seed: int = 13) -> tuple[list[dict], list[dict]]:
     qids = sorted({str(r["qid"]) for r in qrels})
     rnd = Random(seed)
@@ -135,7 +208,7 @@ def build_hybrid_predictions(
     qrels_path: str | None = None,
     top_k: int = 1000,
     lexical_params: dict | None = None,
-    dense_model: str = "BAAI/bge-small-en-v1.5",
+    dense_model: str = "BAAI/bge-base-en-v1.5",
     dense_index_dir: str = "artifacts/dense_index",
     dense_top_k: int = 700,
     reranker_model: str | None = None,
@@ -144,6 +217,10 @@ def build_hybrid_predictions(
     device: str | None = None,
     batch_size: int = 32,
     fusion_config_path: str | None = None,
+    ltr_model_path: str | None = None,
+    use_prf: bool = False,
+    prf_k: int = 10,
+    prf_terms: int = 15,
     progress: ProgressFn | None = None,
 ) -> list[dict]:
     from .dense import DenseRetriever
@@ -168,7 +245,6 @@ def build_hybrid_predictions(
         if progress:
             progress(f"Loading reranker ({reranker_model})...", 0.18)
         from .rerank import CrossEncoderReranker
-
         reranker = CrossEncoderReranker(model_name=reranker_model, device=device, batch_size=max(4, batch_size // 2))
 
     humor_scorer = None
@@ -176,16 +252,29 @@ def build_hybrid_predictions(
         if progress:
             progress(f"Loading humor classifier ({humor_model_dir})...", 0.22)
         from .humor_classifier import HumorPairScorer
-
         humor_scorer = HumorPairScorer(model_dir=humor_model_dir, device=device)
 
+    ltr_ranker = None
+    if ltr_model_path:
+        if progress:
+            progress(f"Loading LTR model ({ltr_model_path})...", 0.24)
+        from .ltr import LTRRanker
+        ltr_ranker = LTRRanker().load(ltr_model_path)
+
     fusion_weights = load_fusion_config(fusion_config_path)
+    idf_map = dict(lexical.idf)
+
     rankings: dict[str, list] = {}
     total_queries = max(1, len(queries))
     for idx, query_row in enumerate(queries, start=1):
         qid = str(query_row["qid"])
         query_text = str(query_row["query"])
-        lexical_rows = lexical.rank(query_text, top_k=top_k)
+
+        if use_prf:
+            lexical_rows = lexical.rank_with_prf(query_text, top_k=top_k, prf_k=prf_k, prf_terms=prf_terms)
+        else:
+            lexical_rows = lexical.rank(query_text, top_k=top_k)
+
         dense_rows = dense.rank(query_text, top_k=min(top_k, dense_top_k))
         fused_seed = rrf_fuse(lexical_rows, dense_rows)
         candidates = build_candidates(lexical_rows, dense_rows)
@@ -196,7 +285,7 @@ def build_hybrid_predictions(
             if docid not in candidates:
                 continue
             doc_text = str(doc_map[docid]["text"])
-            candidates[docid].feature_scores = humor_features(query_text, doc_text)
+            candidates[docid].feature_scores = humor_features(query_text, doc_text, idf_map=idf_map)
 
         rerank_ids = candidate_ids[:rerank_top_n]
         rerank_docs = [(docid, str(doc_map[docid]["text"])) for docid in rerank_ids]
@@ -215,7 +304,15 @@ def build_hybrid_predictions(
                 if docid in candidates:
                     candidates[docid].humor_score = score
 
-        rankings[qid] = weighted_fuse(candidates, fusion_weights, top_k=top_k)
+        if ltr_ranker:
+            ltr_scores = ltr_ranker.predict(candidates)
+            rankings[qid] = sorted(
+                [RetrievedDoc(docid=d, score=s) for d, s in ltr_scores.items()],
+                key=lambda r: r.score, reverse=True
+            )[:top_k]
+        else:
+            rankings[qid] = weighted_fuse(candidates, fusion_weights, top_k=top_k)
+
         if progress and (idx % 5 == 0 or idx == total_queries):
             progress(f"Hybrid ranking queries: {idx}/{total_queries}", 0.25 + 0.7 * (idx / total_queries))
 
@@ -271,14 +368,14 @@ def tune_params(
     return best_params, best_map
 
 
-def evaluate_predictions_file(predictions_path: str, qrels_path: str, k: int) -> float:
+def evaluate_predictions_file(predictions_path: str, qrels_path: str, k: int) -> dict[str, float]:
     predictions = load_json(predictions_path)
     qrels = load_json(qrels_path)
     rel_by_qid = to_qrel_map(qrels)
     pred_by_qid: dict[str, list[str]] = {}
     for row in predictions:
         pred_by_qid.setdefault(str(row["qid"]), []).append(str(row["docid"]))
-    return map_at_k(pred_by_qid, rel_by_qid, k=k)
+    return all_metrics(pred_by_qid, rel_by_qid, k=k)
 
 
 def cmd_predict(args: argparse.Namespace) -> None:
@@ -330,6 +427,10 @@ def cmd_predict_hybrid(args: argparse.Namespace) -> None:
         device=args.device,
         batch_size=args.batch_size,
         fusion_config_path=args.fusion_config,
+        ltr_model_path=getattr(args, "ltr_model", None),
+        use_prf=getattr(args, "use_prf", False),
+        prf_k=getattr(args, "prf_k", 10),
+        prf_terms=getattr(args, "prf_terms", 15),
     )
     if args.zip:
         zip_single_file(args.output, args.zip, arcname="prediction.json")
@@ -469,8 +570,128 @@ def cmd_ablate(args: argparse.Namespace) -> None:
 
 
 def cmd_eval(args: argparse.Namespace) -> None:
-    score = evaluate_predictions_file(args.predictions, args.qrels, args.k)
-    print(f"MAP@{args.k}: {score:.6f}")
+    metrics = evaluate_predictions_file(args.predictions, args.qrels, args.k)
+    for name, val in metrics.items():
+        print(f"{name}: {val:.6f}")
+
+
+def cmd_train_ltr(args: argparse.Namespace) -> None:
+    from .ltr import LTRRanker
+    from .dense import DenseRetriever
+
+    docs = load_json(args.docs)
+    queries = load_json(args.queries)
+    qrels = load_json(args.qrels)
+    doc_map = docs_by_id(docs)
+    rel_by_qid = to_qrel_map(qrels)
+
+    print("Fitting lexical retriever...")
+    lexical = HybridTask1Retriever()
+    lexical.fit(docs=docs, qrels=qrels)
+    idf_map = dict(lexical.idf)
+
+    print(f"Loading dense retriever ({args.dense_model})...")
+    dense = DenseRetriever(model_name=args.dense_model, index_dir=args.dense_index_dir,
+                           device=args.device, batch_size=args.batch_size)
+    dense.ensure_ready(docs=docs)
+
+    reranker = None
+    if args.reranker_model:
+        from .rerank import CrossEncoderReranker
+        reranker = CrossEncoderReranker(model_name=args.reranker_model, device=args.device,
+                                         batch_size=max(4, args.batch_size // 2))
+
+    humor_scorer = None
+    if args.humor_model_dir:
+        from .humor_classifier import HumorPairScorer
+        humor_scorer = HumorPairScorer(model_dir=args.humor_model_dir, device=args.device)
+
+    fusion_weights = load_fusion_config(None)
+    candidates_by_qid: dict = {}
+    print(f"Building candidate feature vectors for {len(queries)} queries...")
+    for q in queries:
+        qid = str(q["qid"])
+        query_text = str(q["query"])
+        lexical_rows = lexical.rank(query_text, top_k=args.top_k)
+        dense_rows = dense.rank(query_text, top_k=min(args.top_k, 700))
+        fused_seed = rrf_fuse(lexical_rows, dense_rows)
+        candidates = build_candidates(lexical_rows, dense_rows)
+        ranked_seed = sorted(fused_seed.items(), key=lambda item: item[1], reverse=True)
+        candidate_ids = [docid for docid, _ in ranked_seed[:max(args.rerank_top_n, 100)]]
+
+        for docid in candidate_ids:
+            if docid not in candidates:
+                continue
+            doc_text = str(doc_map[docid]["text"])
+            candidates[docid].feature_scores = humor_features(query_text, doc_text, idf_map=idf_map)
+
+        rerank_ids = candidate_ids[:args.rerank_top_n]
+        rerank_docs = [(docid, str(doc_map[docid]["text"])) for docid in rerank_ids]
+        if reranker and rerank_docs:
+            from .retriever import HybridTask1Retriever as _R
+            reranked = reranker.rerank(query_text, rerank_docs)
+            rerank_map = {row.docid: row.score for row in _R.normalize_scores(reranked)}
+            for docid, score in rerank_map.items():
+                if docid in candidates:
+                    candidates[docid].rerank_score = score
+
+        if humor_scorer and rerank_docs:
+            humor_scores = humor_scorer.score_pairs(query_text, [t for _, t in rerank_docs],
+                                                     batch_size=max(4, args.batch_size // 2))
+            from .retriever import HybridTask1Retriever as _R, RetrievedDoc as _RD
+            humor_rows = [_RD(docid=d, score=float(s)) for (d, _), s in zip(rerank_docs, humor_scores)]
+            humor_map = {r.docid: r.score for r in _R.normalize_scores(humor_rows)}
+            for docid, score in humor_map.items():
+                if docid in candidates:
+                    candidates[docid].humor_score = score
+
+        candidates_by_qid[qid] = candidates
+
+    ltr = LTRRanker(max_depth=args.max_depth, n_estimators=args.n_estimators)
+    print("Running leave-one-query-out cross-validation...")
+    cv_map = ltr.fit(candidates_by_qid, rel_by_qid)
+    print(f"CV MAP (leave-one-query-out): {cv_map:.6f}")
+    ltr.save(args.output)
+    print(f"LTR model saved to {args.output}")
+
+
+def cmd_finetune_dense(args: argparse.Namespace) -> None:
+    from sentence_transformers import SentenceTransformer, InputExample, losses
+    from torch.utils.data import DataLoader
+
+    docs = load_json(args.docs)
+    queries = load_json(args.queries)
+    qrels = load_json(args.qrels)
+    doc_map = docs_by_id(docs)
+    rel_by_qid = to_qrel_map(qrels)
+    q_map = {str(q["qid"]): str(q["query"]) for q in queries}
+
+    train_examples = []
+    for qid, rel_set in rel_by_qid.items():
+        query_text = q_map.get(qid, "")
+        if not query_text:
+            continue
+        for docid in rel_set:
+            doc_text = str(doc_map[docid]["text"]) if docid in doc_map else ""
+            if doc_text:
+                train_examples.append(InputExample(texts=[query_text, doc_text]))
+
+    if not train_examples:
+        print("No training examples found.")
+        return
+
+    print(f"Fine-tuning {args.model_name} on {len(train_examples)} (query, doc) pairs...")
+    model = SentenceTransformer(args.model_name, device=args.device)
+    loader = DataLoader(train_examples, shuffle=True, batch_size=args.batch_size)
+    loss = losses.MultipleNegativesRankingLoss(model)
+    model.fit(
+        train_objectives=[(loader, loss)],
+        epochs=args.epochs,
+        warmup_steps=max(1, len(loader) // 5),
+        output_path=args.output_dir,
+        show_progress_bar=True,
+    )
+    print(f"Fine-tuned dense model saved to {args.output_dir}")
 
 
 def cmd_compare_models(args: argparse.Namespace) -> None:
@@ -607,7 +828,7 @@ def parser() -> argparse.ArgumentParser:
 
     pd = sub.add_parser("build-dense-index", help="Build and store dense embeddings/index")
     pd.add_argument("--docs", required=True)
-    pd.add_argument("--model-name", default="BAAI/bge-small-en-v1.5")
+    pd.add_argument("--model-name", default="BAAI/bge-base-en-v1.5")
     pd.add_argument("--index-dir", default="artifacts/dense_index")
     pd.add_argument("--device", default=None)
     pd.add_argument("--batch-size", type=int, default=32)
@@ -622,7 +843,7 @@ def parser() -> argparse.ArgumentParser:
     ph.add_argument("--run-id", required=True)
     ph.add_argument("--manual", type=int, choices=[0, 1], default=0)
     ph.add_argument("--top-k", type=int, default=1000)
-    ph.add_argument("--dense-model", default="BAAI/bge-small-en-v1.5")
+    ph.add_argument("--dense-model", default="BAAI/bge-base-en-v1.5")
     ph.add_argument("--dense-index-dir", default="artifacts/dense_index")
     ph.add_argument("--dense-top-k", type=int, default=700)
     ph.add_argument("--reranker-model")
@@ -631,6 +852,10 @@ def parser() -> argparse.ArgumentParser:
     ph.add_argument("--device", default=None)
     ph.add_argument("--batch-size", type=int, default=32)
     ph.add_argument("--fusion-config")
+    ph.add_argument("--ltr-model", default=None, help="Path to trained LTR model (.pkl)")
+    ph.add_argument("--use-prf", action="store_true", help="Enable pseudo-relevance feedback")
+    ph.add_argument("--prf-k", type=int, default=10, help="PRF: number of feedback docs")
+    ph.add_argument("--prf-terms", type=int, default=15, help="PRF: expansion terms")
     ph.set_defaults(func=cmd_predict_hybrid)
 
     pt = sub.add_parser("train-humor", help="Train a query-conditioned humor pair classifier")
@@ -655,7 +880,7 @@ def parser() -> argparse.ArgumentParser:
     pa.add_argument("--run-id", required=True)
     pa.add_argument("--manual", type=int, choices=[0, 1], default=0)
     pa.add_argument("--top-k", type=int, default=1000)
-    pa.add_argument("--dense-model", default="BAAI/bge-small-en-v1.5")
+    pa.add_argument("--dense-model", default="BAAI/bge-base-en-v1.5")
     pa.add_argument("--dense-index-dir", default="artifacts/dense_index")
     pa.add_argument("--dense-top-k", type=int, default=700)
     pa.add_argument("--reranker-model")
@@ -666,11 +891,39 @@ def parser() -> argparse.ArgumentParser:
     pa.add_argument("--fusion-config")
     pa.set_defaults(func=cmd_ablate)
 
-    pe = sub.add_parser("eval", help="Evaluate predictions against qrels (MAP@K)")
+    pe = sub.add_parser("eval", help="Evaluate predictions against qrels (MAP, NDCG, MRR, Recall, P@10)")
     pe.add_argument("--predictions", required=True)
     pe.add_argument("--qrels", required=True)
     pe.add_argument("-k", type=int, default=1000)
     pe.set_defaults(func=cmd_eval)
+
+    pltr = sub.add_parser("train-ltr", help="Train XGBoost L2R model on training queries")
+    pltr.add_argument("--docs", required=True)
+    pltr.add_argument("--queries", required=True)
+    pltr.add_argument("--qrels", required=True)
+    pltr.add_argument("--output", default="artifacts/ltr_model.pkl")
+    pltr.add_argument("--dense-model", default="BAAI/bge-base-en-v1.5")
+    pltr.add_argument("--dense-index-dir", default="artifacts/dense_index")
+    pltr.add_argument("--reranker-model", default=None)
+    pltr.add_argument("--rerank-top-n", type=int, default=200)
+    pltr.add_argument("--humor-model-dir", default=None)
+    pltr.add_argument("--device", default=None)
+    pltr.add_argument("--batch-size", type=int, default=32)
+    pltr.add_argument("--top-k", type=int, default=1000)
+    pltr.add_argument("--max-depth", type=int, default=3)
+    pltr.add_argument("--n-estimators", type=int, default=100)
+    pltr.set_defaults(func=cmd_train_ltr)
+
+    pfd = sub.add_parser("finetune-dense", help="Fine-tune dense model on humor (query, doc) pairs")
+    pfd.add_argument("--docs", required=True)
+    pfd.add_argument("--queries", required=True)
+    pfd.add_argument("--qrels", required=True)
+    pfd.add_argument("--model-name", default="BAAI/bge-base-en-v1.5")
+    pfd.add_argument("--output-dir", default="artifacts/finetuned_dense")
+    pfd.add_argument("--device", default=None)
+    pfd.add_argument("--epochs", type=int, default=5)
+    pfd.add_argument("--batch-size", type=int, default=16)
+    pfd.set_defaults(func=cmd_finetune_dense)
 
     pcm = sub.add_parser("compare-models", help="Compare multiple reranker models and write a summary JSON")
     pcm.add_argument("--docs", required=True)
@@ -681,7 +934,7 @@ def parser() -> argparse.ArgumentParser:
     pcm.add_argument("--run-id", required=True)
     pcm.add_argument("--manual", type=int, choices=[0, 1], default=0)
     pcm.add_argument("--top-k", type=int, default=1000)
-    pcm.add_argument("--dense-model", default="BAAI/bge-small-en-v1.5")
+    pcm.add_argument("--dense-model", default="BAAI/bge-base-en-v1.5")
     pcm.add_argument("--dense-index-dir", default="artifacts/dense_index")
     pcm.add_argument("--dense-top-k", type=int, default=700)
     pcm.add_argument("--models", nargs="+", required=True, help="List of reranker model names to compare")

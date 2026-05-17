@@ -1,0 +1,59 @@
+# Dataset files (large, not for version control)
+*.json
+!src/joker_task1/*.json
+
+# Model artifacts and indices
+artifacts/
+src/artifacts/
+
+# Predictions and submissions
+prediction*.json
+src/prediction*.json
+submission.zip
+src/submission.zip
+tuned_params.json
+src/tuned_params.json
+
+# Python build artefacts
+__pycache__/
+*.pyc
+*.pyo
+src/joker_clef_task1.egg-info/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# PowerPoint / Office files
+*.pptx
+~$*
+temp_ppt/
+
+# One-off scripts and raw output
+extract_pptx.py
+extracted_ppt_text.txt
+update_presentation.py
+generate_figures.py
+generate_dataset_chart.py
+TODO.md
+
+# Loose figures at project root (use report/ instead)
+/fig_dataset_new.png
+/fig_literature.png
+/fig_pipeline_new.png
+/fig_results_new.png
+/fig_timeline_new.png
+/fig_dataset_viz.png
+/fig_results_comparison.png
+
+# Accidental pip install artefacts
+=*
+
+# Logos / assets not needed in repo
+"Picture1 (1).png"
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,2 +1,23 @@
 
 \chapter{Experimental Results/Analysis}
+The latest optimized system reported in the project README achieves a best MAP@1000 score of 0.486 using bge-base embeddings, XGBoost learning-to-rank, PRF expansion, and RoBERTa-based humor scoring.
+
+\section{Comparative Performance}
+Figure~\ref{fig:results-compare} compares the major configurations evaluated during development.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.92\textwidth]{../../fig_results_comparison.png}
+    \caption{Comparison of retrieval performance across system variants.}
+    \label{fig:results-compare}
+\end{figure}
+
+\section{Ablation Study}
+To understand individual component impact, an ablation experiment was conducted as shown in Figure~\ref{fig:ablation}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{../../fig_ablation.png}
+    \caption{Ablation analysis of major components in the proposed pipeline.}
+    \label{fig:ablation}
+\end{figure}

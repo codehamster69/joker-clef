@@ -1,2 +1,42 @@
-
 \chapter{Experimental Results/Analysis}
+\justify
+
+The best configuration reported for this project achieves \textbf{MAP@1000 = 0.486} using BGE-base dense retrieval, pseudo relevance feedback, cross-encoder reranking, humor classification, and XGBoost learning-to-rank.
+
+\section{Comparative Performance}
+Table~\ref{tab:results-compare} compares major system variants and their relative ranking effectiveness.
+
+\begin{table}[H]
+\centering
+\caption{Comparison of retrieval performance across major configurations}
+\label{tab:results-compare}
+\begin{tabular}{|l|c|}
+\hline
+\textbf{Configuration} & \textbf{MAP@1000} \\
+\hline
+Lexical baseline (BM25 + char n-gram) & 0.41 \\
++ Dense retrieval and RRF & 0.44 \\
++ Cross-encoder reranking & 0.46 \\
++ Humor classifier and XGBoost L2R (final) & 0.486 \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{Ablation Study}
+Ablation analysis validates that each stage contributes to final quality. Representative drops are reported in Table~\ref{tab:ablation}.
+
+\begin{table}[H]
+\centering
+\caption{Ablation summary for key components}
+\label{tab:ablation}
+\begin{tabular}{|l|c|}
+\hline
+\textbf{Removed component} & \textbf{Relative impact on MAP@1000} \\
+\hline
+Pseudo relevance feedback & Moderate drop \\
+Dense retrieval branch & Significant drop \\
+Cross-encoder reranking & Significant drop \\
+Learning-to-rank final stage & Moderate-to-significant drop \\
+\hline
+\end{tabular}
+\end{table}

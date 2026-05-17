@@ -1,2 +1,8 @@
 \chapter{Discussion}
+\justify
 
+The task setting presents two key challenges: short query ambiguity and humor subjectivity. Query terms such as \textit{death} or \textit{hospital} can map to many topics, and humorous relevance depends on context beyond literal overlap.
+
+The hybrid architecture addresses this by pairing lexical matching with semantic retrieval. Lexical retrieval preserves exact cues, while dense retrieval recovers conceptually related jokes. Reranking and humor scoring then improve precision among candidates.
+
+Despite improvements, limitations remain. Small training query count constrains robust supervision, and humor interpretation varies across users and cultural context. Therefore, model generalization can still fluctuate for niche query intents.

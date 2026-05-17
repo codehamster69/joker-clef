@@ -3,17 +3,7 @@
     \Large \textbf{\uppercase{Abstract}}
 \end{center}
 
-\vspace{3\baselineskip}
-
-\vspace{1ex}
-
-
+\vspace{2\baselineskip}
 \justify
-Abstract goes here
 
-
-
-
-
-
-
+This report presents our submission for \textbf{JOKER @ CLEF 2025 Task 1}, a humor-aware information retrieval problem over 77,658 short English snippets. The task requires ranking humorous and query-relevant documents for highly ambiguous one-to-three-word queries. We design a multi-stage hybrid architecture combining lexical retrieval (BM25 + character n-grams), dense retrieval (BGE embeddings with FAISS), reciprocal rank fusion, cross-encoder reranking, and RoBERTa-based humor scoring. Final ranking is optimized using XGBoost learning-to-rank with humor-aware engineered features. The best system achieves \textbf{MAP@1000 = 0.486}. Results show that combining lexical precision, semantic recall, and humor-specific modeling is effective for this domain.

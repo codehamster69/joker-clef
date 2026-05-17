@@ -1,6 +1,10 @@
 \chapter{Literature Review/Related Work}
+\justify
 
- 
+Humor retrieval intersects classical information retrieval, neural semantic search, and computational humor analysis. Traditional lexical approaches such as BM25 are strong for exact token overlap, but they often miss semantic and figurative matches in short humorous texts.
 
+Recent dense retrieval methods based on transformer encoders improve semantic recall by mapping queries and documents into a shared vector space. In practice, hybrid retrieval (lexical + dense) frequently outperforms either approach individually.
 
+Reranking architectures such as cross-encoders provide high-precision relevance estimates by jointly encoding query-document pairs. In parallel, task-specific humor modeling has shown that stylistic cues (incongruity, punctuation usage, ambiguity, and sentiment contrast) can improve ranking quality for humor-centric tasks.
 
+Based on these findings, the present project uses a layered approach: hybrid candidate generation, neural reranking, and humor-aware features integrated through learning-to-rank.

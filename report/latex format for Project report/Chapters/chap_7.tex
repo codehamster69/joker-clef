@@ -1,3 +1,16 @@
 \chapter{Conclusion and Future Scope}
+\justify
 
+This project demonstrates that humor-aware retrieval benefits from hybrid search and multi-stage ranking. A pure lexical baseline is insufficient for short ambiguous queries, while the combination of dense semantics, reranking, humor scoring, and learning-to-rank substantially improves final ranking quality.
 
+\section{Conclusion}
+The developed system is practical, modular, and aligned with CLEF JOKER Task 1 requirements. The achieved MAP@1000 score indicates strong effectiveness for humor-centric retrieval.
+
+\section{Future Scope}
+Future improvements may include:
+\begin{itemize}
+    \item larger cross-encoder and reranker distillation,
+    \item query intent expansion using LLM-assisted reformulation,
+    \item multilingual transfer for non-English humor retrieval, and
+    \item better calibration between humor and topical relevance signals.
+\end{itemize}

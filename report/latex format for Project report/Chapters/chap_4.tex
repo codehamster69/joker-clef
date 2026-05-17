@@ -1,1 +1,37 @@
 \chapter{Methodology/Experimental Setup}
+\justify
+
+The proposed system follows a multi-stage architecture that progressively improves recall and precision.
+
+\section{Pipeline Overview}
+\begin{enumerate}
+    \item Lexical retrieval using BM25 with character n-gram support and optional pseudo relevance feedback.
+    \item Dense retrieval using BAAI/bge-base-en-v1.5 embeddings with FAISS indexing.
+    \item Reciprocal Rank Fusion to merge lexical and dense candidate lists.
+    \item Feature extraction (lexical, semantic, and humor-aware signals).
+    \item Cross-encoder reranking for fine-grained relevance estimation.
+    \item Humor pair classifier scoring using RoBERTa.
+    \item Final ranking using weighted fusion or XGBoost learning-to-rank.
+\end{enumerate}
+
+\section{Pipeline Stage Summary}
+The end-to-end implementation used in the latest project version is summarized in Table~\ref{tab:pipeline-stages}.
+
+\begin{table}[H]
+\centering
+\caption{Pipeline stages in the proposed retrieval system}
+\label{tab:pipeline-stages}
+\begin{tabular}{|c|p{9cm}|}
+\hline
+\textbf{Stage} & \textbf{Purpose} \\
+\hline
+1 & Lexical retrieval (BM25 + char n-gram) and optional PRF expansion \\
+2 & Dense semantic retrieval using BGE + FAISS \\
+3 & Candidate merging via reciprocal rank fusion \\
+4 & Feature extraction with humor-aware signals \\
+5 & Cross-encoder reranking \\
+6 & RoBERTa humor pair scoring \\
+7 & Final ranking via weighted fusion / XGBoost L2R \\
+\hline
+\end{tabular}
+\end{table}

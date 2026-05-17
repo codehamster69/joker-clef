@@ -1,8 +1,19 @@
 \chapter{Introduction}
 \justify
 
+The CLEF JOKER 2025 Task 1 shared task focuses on humor-aware ad-hoc retrieval, where a system must return humorous snippets relevant to short clue-like queries. Unlike traditional keyword retrieval, relevance here depends on both topical match and comedic intent.
 
+\section{Problem Statement}
+Given a query of one to three terms (for example: \textit{colors}, \textit{death}, \textit{hospital}), the objective is to rank documents from a corpus of 77,658 entries such that humorous and query-relevant texts appear at top ranks.
 
-\newpage
+\section{Objectives}
+The project aims to:
+\begin{itemize}
+    \item build a robust retrieval pipeline for very short and ambiguous queries,
+    \item combine lexical, semantic, and humor-specific signals,
+    \item optimize final ranking quality using learning-to-rank, and
+    \item maximize MAP@1000, the official evaluation metric.
+\end{itemize}
 
-
+\section{Project Contributions}
+This work presents a complete multi-stage system with BM25-based lexical retrieval, dense embedding retrieval (BGE), reciprocal rank fusion, cross-encoder reranking, and humor-pair classification with RoBERTa. A final fusion stage with XGBoost learning-to-rank yields the best observed performance.

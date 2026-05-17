@@ -1,0 +1,159 @@
+\documentclass[dvipsnames,12pt]{report} 
+%\documentclass[12pt,twoside]{report}
+
+
+%load any additional packages
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{multicol}
+\usepackage{subfig}
+\usepackage{lscape}
+\usepackage{float}
+\usepackage[document]{ragged2e}
+\usepackage[colorinlistoftodos]{todonotes}
+\usepackage{tikz}
+\usepackage{dirtytalk}
+\usetikzlibrary{shapes.geometric, arrows}
+\usepackage[utf8]{inputenc}
+\usepackage{multirow}
+\usepackage{datetime}
+\newdateformat{monthyeardate}{%
+  \monthname[\THEMONTH], \THEYEAR}
+\usepackage[english]{babel}
+\usepackage{wrapfig}
+\usepackage{rotating}
+\usepackage{epstopdf}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{float}
+\usepackage{pdfpages}
+\usepackage{hyperref} 
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhead{}
+% \fancyhead[LO,LE]{\scriptsize \mytitle}
+%\fancyhead[RO,RE]{\leftmark}
+%\fancyfoot{}
+% \fancyfoot[CE,CO]{\footnotesize \thepage}
+%\fancyfoot[LO,RE]{\footnotesize \leftmark}
+%\fancyfoot[CO,CE]{\footnotesize}
+%\fancyfoot[CE,CO]{Design of Low-Energy Level Shifter for Ultra Low-Voltage Emerging Applications}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%\usepackage[square,numbers]{natbib}
+%\bibliographystyle{plainnat}
+\bibliographystyle{IEEEtran}
+%\usepackage[sectionbib]{chapterbib}
+%\setcitestyle{square}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\setlength{\topmargin}{0.0in}
+\setlength{\oddsidemargin}{0.33in}
+\setlength{\evensidemargin}{-0.08in}
+\setlength{\textheight}{8.5in}
+\setlength{\textwidth}{6.0in}
+
+\def\mytitle{Advanced Data Analytics (ADA) Project Report \\on\\ \textcolor{red}{Project name}}
+\def\myname{name}
+\def\mydegree{Specialization}
+\def\mysupervisor{guide name}
+\def\myrollno{roll no}
+\def\mydep{Computer Science and Engineering}
+\def\mydegreedate{4\textsuperscript{th} Month, Year}
+
+\setlength{\marginparwidth}{2cm}
+
+\begin{document}
+    \baselineskip=18pt plus1pt
+    \setcounter{secnumdepth}{3}
+    \setcounter{tocdepth}{3}
+    \pagenumbering{roman}
+    %Front Matter
+    \include{./Formalities/title_page}
+    
+    \phantomsection
+    \addcontentsline{toc}{chapter}{Certificate}
+    \include{./Formalities/certificate}
+        
+    \phantomsection
+    \addcontentsline{toc}{chapter}{Declaration}
+    \include{./Formalities/certificate_of_approval}
+    
+    \phantomsection
+    \addcontentsline{toc}{chapter}{Acknowledgements}    
+    \include{./Formalities/acknowledgements}
+    
+    \phantomsection
+    \addcontentsline{toc}{chapter}{Abstract}
+    \include{./Formalities/abstract}
+    
+    
+    
+    \phantomsection
+    \tableofcontents
+    \protect
+
+    \phantomsection
+    \addcontentsline{toc}{chapter}{Symbols}
+    \include{./Formalities/acronyms}
+    
+    \phantomsection
+    \addcontentsline{toc}{chapter}{List of Figures}
+    \listoffigures
+    % \listoftables
+    
+    %Main material
+    \clearpage
+    \pagenumbering{arabic}
+    
+    \include{Chapters/chap_1}
+
+    \include{Chapters/chap_2}
+
+    \include{Chapters/chap_3}
+    
+    \include{Chapters/chap_4}
+    
+    \include{Chapters/chap_5}
+
+    %\include{Chapters/chap_6}
+
+    \include{Chapters/chap_7}
+
+    
+
+    \renewcommand{\bibname}{References}
+    %\bibliography{mybibliograph}
+    \newpage
+    \phantomsection
+    \addcontentsline{toc}{chapter}{References}
+    \include{references}
+
+    \phantomsection
+    \addcontentsline{toc}{chapter}{Supervisor Evaluation of Intern}
+    %\includepdf[scale=1,pages={1},pagecommand={\thispagestyle{plain}}]{Extras/5and6.pdf}
+
+    \phantomsection
+    \addcontentsline{toc}{chapter}{Student Feedback of Internship}
+    %\includepdf[scale=1,pages={2,3}, pagecommand={\thispagestyle{plain}}]{Extras/5and6.pdf}
+
+    \phantomsection
+    \addcontentsline{toc}{chapter}{Plagiarism Report}
+    %\includepdf[scale=1,pages={1}, pagecommand={\thispagestyle{plain}}]{Extras/Plagiarism.pdf}
+
+    
+    \phantomsection
+    \addcontentsline{toc}{chapter}{Daily Logs}
+     %\includepdf[scale=1,pages=-, pagecommand={\thispagestyle{plain}}]{Extras/Book1.pdf}
+    
+
+    % \newpage
+    % \includepdf[scale=0.75,pages=-,pagecommand=\textbf{\large{APPENDIX-A: Guide}}]{Appendix/GUIDE.pdf}
+    % \include{Appendix/APPENDIX}
+
+\end{document}

@@ -57,3 +57,6 @@ TODO.md
 Thumbs.db
 .vscode/
 .idea/
+
+# Local build artifacts
+joker_report_overleaf.zip

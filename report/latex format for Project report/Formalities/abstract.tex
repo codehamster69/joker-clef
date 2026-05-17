@@ -3,17 +3,10 @@
     \Large \textbf{\uppercase{Abstract}}
 \end{center}
 
-\vspace{3\baselineskip}
-
-\vspace{1ex}
-
-
+\vspace{2\baselineskip}
 \justify
-Abstract goes here
+This report presents a complete implementation of a humor-aware information retrieval system for \textbf{JOKER @ CLEF 2025 Task 1}. The goal is to retrieve humorous and topically relevant text snippets for very short clue-style queries. The proposed solution follows a multi-stage architecture that combines lexical retrieval, dense semantic retrieval, reciprocal-rank fusion, cross-encoder reranking, and humor-specific scoring.
 
+The system is designed to handle ambiguity in short queries using pseudo-relevance feedback and to improve ranking quality through feature-rich learning-to-rank optimization. The final configuration integrates BM25 and character n-gram signals with BGE dense embeddings, RoBERTa-based humor pair scoring, and XGBoost-based rank learning. Experimental analysis shows that combining complementary ranking signals is significantly more effective than relying on a single retrieval method.
 
-
-
-
-
-
+The best model configuration in this project achieves a strong MAP@1000 score and demonstrates that humor retrieval benefits from both semantic matching and task-specific humor cues. The report details dataset characteristics, methodology, implementation flow, evaluation, and future scope.

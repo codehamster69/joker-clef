@@ -1,8 +1,16 @@
 \chapter{Introduction}
 \justify
+Humor-aware retrieval is an advanced form of information retrieval where the system must jointly model topical relevance and comedic intent. In JOKER @ CLEF 2025 Task 1, queries are extremely short (typically one to three words), which increases ambiguity and makes lexical matching alone insufficient.
 
+This project, \textbf{JOKER-CLEF}, addresses the challenge through a multi-stage retrieval and reranking architecture. The system first generates high-recall candidates, then progressively refines rankings using semantic similarity and humor-oriented signals.
 
+\section{Problem Statement}
+Given a short query and a corpus of humorous snippets, retrieve and rank documents that are both relevant to the query and humorous in context.
 
-\newpage
-
-
+\section{Objectives}
+\begin{itemize}
+    \item Build a reproducible pipeline for CLEF JOKER Task 1 retrieval.
+    \item Improve baseline lexical retrieval using dense retrieval and rank fusion.
+    \item Introduce humor-aware and linguistic features for final ranking.
+    \item Evaluate model variants using MAP@1000 and component-wise ablations.
+\end{itemize}

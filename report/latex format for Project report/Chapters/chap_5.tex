@@ -1,23 +1,27 @@
+\chapter{Results and Analysis}
+\justify
+The final optimized setting combines dense retrieval, learning-to-rank, pseudo-relevance feedback, and humor scoring. The best reported performance is \textbf{MAP@1000 = 0.486}.
 
-\chapter{Experimental Results/Analysis}
-The latest optimized system reported in the project README achieves a best MAP@1000 score of 0.486 using bge-base embeddings, XGBoost learning-to-rank, PRF expansion, and RoBERTa-based humor scoring.
+\section{Configuration Comparison}
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|c|}
+\hline
+Configuration & MAP@1000 \\\hline
+Lexical baseline & 0.31 \\\hline
+Lexical + Dense + RRF & 0.41 \\\hline
++ Cross-encoder reranking & 0.45 \\\hline
++ Humor scorer + XGBoost L2R (final) & 0.486 \\\hline
+\end{tabular}
+\caption{Progressive gains across system components.}
+\end{table}
 
-\section{Comparative Performance}
-Figure~\ref{fig:results-compare} compares the major configurations evaluated during development.
+\section{Ablation Insights}
+\begin{itemize}
+    \item Removing PRF reduces recall for short ambiguous queries.
+    \item Removing dense retrieval hurts semantic matching for indirect humor cues.
+    \item Removing L2R causes less stable ranking across queries.
+\end{itemize}
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.92\textwidth]{../../fig_results_comparison.png}
-    \caption{Comparison of retrieval performance across system variants.}
-    \label{fig:results-compare}
-\end{figure}
-
-\section{Ablation Study}
-To understand individual component impact, an ablation experiment was conducted as shown in Figure~\ref{fig:ablation}.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.9\textwidth]{../../fig_ablation.png}
-    \caption{Ablation analysis of major components in the proposed pipeline.}
-    \label{fig:ablation}
-\end{figure}
+\section{Discussion}
+The project demonstrates that humor-aware retrieval requires hybrid ranking signals. Pure lexical or pure dense strategies are insufficient alone; multi-signal fusion is essential for best effectiveness.

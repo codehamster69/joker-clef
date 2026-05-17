@@ -1,12 +1,33 @@
-\chapter{Methodology/Experimental Setup}
-Our pipeline follows a multi-stage design: lexical retrieval, dense retrieval, rank fusion, and learning-to-rank optimization for final ranking.
+\chapter{Methodology and Experimental Setup}
+\justify
+The proposed system uses a seven-stage ranking pipeline.
 
-\section{System Pipeline}
-The complete workflow implemented for the latest version of the project is shown in Figure~\ref{fig:pipeline}.
+\section{Pipeline Stages}
+\begin{enumerate}
+    \item BM25 + character n-gram lexical retrieval.
+    \item Dense retrieval using BGE embeddings and FAISS.
+    \item Reciprocal Rank Fusion (RRF) for candidate merging.
+    \item Feature extraction (lexical, structural, and humor-aware).
+    \item Cross-encoder reranking on top candidates.
+    \item RoBERTa humor-pair scoring.
+    \item Final rank fusion using static weights or XGBoost L2R.
+\end{enumerate}
 
+\section{Architecture Figure (LaTeX Native)}
 \begin{figure}[H]
-    \centering
-    \includegraphics[width=0.95\textwidth]{../../fig_pipeline.png}
-    \caption{End-to-end retrieval pipeline for JOKER @ CLEF 2025 Task 1.}
-    \label{fig:pipeline}
+\centering
+\begin{tikzpicture}[node distance=0.7cm, >=latex]
+\tikzstyle{blk}=[rectangle, draw, rounded corners, minimum width=11.5cm, minimum height=0.8cm, align=center]
+\node[blk,fill=gray!15] (q) {Query (1--3 words)};
+\node[blk,fill=blue!10,below=of q] (l) {Lexical Retrieval: BM25 + Char N-gram + PRF};
+\node[blk,fill=green!10,below=of l] (d) {Dense Retrieval: BGE + FAISS};
+\node[blk,fill=yellow!20,below=of d] (r) {RRF Candidate Fusion};
+\node[blk,fill=orange!20,below=of r] (f) {Feature Extraction + Cross-Encoder + Humor Classifier};
+\node[blk,fill=red!15,below=of f] (x) {Final Ranking: XGBoost L2R / Weighted Fusion};
+\draw[->] (q) -- (l); \draw[->] (l) -- (d); \draw[->] (d) -- (r); \draw[->] (r) -- (f); \draw[->] (f) -- (x);
+\end{tikzpicture}
+\caption{Native LaTeX diagram of the proposed retrieval architecture.}
 \end{figure}
+
+\section{Evaluation Protocol}
+Evaluation follows MAP@1000 on official task format outputs. Development emphasizes robustness under extremely small training-query count and highly sparse query semantics.

@@ -1,6 +1,7 @@
-\chapter{Literature Review/Related Work}
+\chapter{Related Work}
+\justify
+Classical ad-hoc retrieval relies on lexical matching (e.g., BM25), which works well when queries contain sufficient context. However, short-query retrieval benefits from semantic encoders and fusion strategies.
 
- 
+Recent retrieval systems commonly adopt multi-stage designs: first-stage retrieval for recall, neural reranking for precision, and learning-to-rank for optimized final ordering. In humor-oriented tasks, lexical overlap alone cannot capture incongruity, pun potential, or sentiment contrast; therefore, dedicated humor features and pairwise classifiers are useful for ranking refinement.
 
-
-
+The approach in this project follows this established direction by combining lexical, dense, and learned ranker components in a single pipeline.

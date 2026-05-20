@@ -1,42 +1,98 @@
 \chapter{Dataset and Task Setup}
 \justify
-The CLEF JOKER Task 1 dataset contains a humor-focused English corpus and query-relevance annotations.
 
-\section{Dataset Summary}
-\begin{table}[H]
-\centering
-\begin{tabular}{|l|c|}
-\hline
-Corpus size & 77,658 documents \\\hline
-Training queries & 12 \\\hline
-Training qrels & 660 \\\hline
-Test queries & 219 \\\hline
-Primary metric & MAP@1000 \\\hline
-\end{tabular}
-\caption{Dataset statistics used in this project.}
-\end{table}
+\section{CLEF JOKER 2025 Task 1 Overview}
 
-\section{Task Characteristics}
+JOKER (Wordplay \& Humour Modelling) is a recurring lab at the Conference and Labs of the Evaluation Forum (CLEF). Task 1 is an ad-hoc information retrieval task: given a short query, retrieve and rank up to 1000 documents from a fixed humor corpus. The task is evaluated using TREC-style relevance judgments and the primary metric MAP@1000.
+
+\section{Data Files and Format}
+
+The dataset consists of three JSON files:
+
 \begin{itemize}
-    \item Queries are very short and ambiguous.
-    \item Relevance is humor-sensitive and context-dependent.
-    \item Candidate generation requires balancing recall and precision.
+    \item \textbf{Corpus} (\texttt{joker\_task1\_retrieval\_corpus25\_EN.json}): A collection of 77,658 short English humorous text fragments. Each entry is a JSON object with fields \texttt{docid} (unique integer) and \texttt{text} (the document string).
+
+    \item \textbf{Queries} (\texttt{joker\_task1\_retrieval\_queries\_\{train|test\}25\_EN.json}): Each entry has fields \texttt{qid} (unique integer) and \texttt{query} (the query string). Training set contains 12 queries; test set contains 219 queries.
+
+    \item \textbf{Relevance Judgments / Qrels} (\texttt{joker\_task1\_retrieval\_qrels\_train25\_EN.json}): Each entry has fields \texttt{qid}, \texttt{docid}, and \texttt{qrel} (binary: 1 = relevant). Only training-set judgments are released; the test set is evaluated by CLEF organizers.
 \end{itemize}
 
-\section{Dataset Visualization (LaTeX Figure)}
+Figure~\ref{fig:dataset} illustrates the data statistics and shows representative examples of the three file types with the linkage between them via shared \texttt{qid} and \texttt{docid} fields.
+
 \begin{figure}[H]
 \centering
-\begin{tikzpicture}[x=1cm,y=0.55cm]
-\fill[blue!30] (0,0) rectangle (7.8,0.7);
-\fill[green!35] (0,1.3) rectangle (1.2,2.0);
-\fill[orange!40] (0,2.6) rectangle (2.19,3.3);
-\node[left] at (0,0.35) {Corpus (x10k)};
-\node[left] at (0,1.65) {Train queries (x10)};
-\node[left] at (0,2.95) {Test queries (x100)};
-\node[right] at (7.8,0.35) {7.77};
-\node[right] at (1.2,1.65) {1.2};
-\node[right] at (2.19,2.95) {2.19};
-\draw[->] (0,-0.6) -- (8.2,-0.6) node[right]{scaled count};
-\end{tikzpicture}
-\caption{Scaled bar-style visualization of dataset composition.}
+\includegraphics[width=0.95\textwidth]{Media/fig_dataset_viz.png}
+\caption{Dataset overview: key statistics (left) and a representative example of the three linked data files (right). The query ``\textit{death}'' is linked via \texttt{qid=19} to corpus document \texttt{docid=9565} (``\textit{I plan to work in a cemetery, Tom plotted gravely.}'') through a qrel entry with relevance score 1.}
+\label{fig:dataset}
 \end{figure}
+
+\section{Dataset Statistics}
+
+Table~\ref{tab:dataset} summarizes the key statistics of the CLEF JOKER 2025 Task 1 dataset.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|r|}
+\hline
+\textbf{Property} & \textbf{Value} \\\hline
+Corpus documents & 77,658 \\\hline
+Training queries & 12 \\\hline
+Test queries & 219 \\\hline
+Total queries & 231 \\\hline
+Training relevance labels & 660 \\\hline
+Primary evaluation metric & MAP@1000 \\\hline
+Document language & English \\\hline
+\end{tabular}
+\caption{CLEF JOKER 2025 Task 1 dataset statistics.}
+\label{tab:dataset}
+\end{table}
+
+\section{Corpus Characteristics}
+
+The corpus consists of short humorous English text fragments---jokes, puns, humorous observations, and wordplay snippets. Key characteristics:
+
+\begin{itemize}
+    \item \textbf{Document length:} Median 18 words, mean 20.4 words. 69\% of documents are in the 11--30 word range, reflecting the concise nature of joke formats.
+    \item \textbf{Content type:} Single-sentence jokes, question-answer format jokes (setup + punchline), and short humorous narratives.
+    \item \textbf{Humor mechanisms:} Puns (phonetic/semantic ambiguity), wordplay (polysemy exploitation), incongruity (unexpected associations), and dark humor (morbid or absurdist content).
+\end{itemize}
+
+Table~\ref{tab:trainqueries} lists all 12 training queries with their relevance label counts.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|l|c|}
+\hline
+\textbf{QID} & \textbf{Query} & \textbf{\# Relevant Docs} \\\hline
+8   & colors          & 39  \\\hline
+15  & tom             & 364 \\\hline
+19  & death           & 45  \\\hline
+51  & domestic animal & 94  \\\hline
+58  & math            & 55  \\\hline
+139 & space           & 18  \\\hline
+142 & buzz            & 9   \\\hline
+145 & testament       & 4   \\\hline
+154 & steps           & 6   \\\hline
+185 & vein            & 7   \\\hline
+187 & interest        & 14  \\\hline
+191 & faculty         & 5   \\\hline
+\hline
+\multicolumn{2}{|l|}{\textbf{Total}} & \textbf{660} \\\hline
+\end{tabular}
+\caption{All 12 training queries with relevance label counts. Note the extreme imbalance: ``tom'' has 364 relevant documents while ``testament'' has only 4.}
+\label{tab:trainqueries}
+\end{table}
+
+\section{Task Characteristics and Challenges}
+
+\subsection{Query Brevity}
+Of the 231 total queries, 225 (97.4\%) are single words, 5 are two-word phrases, and only 1 is a three-word phrase. This extreme brevity means there is almost no explicit lexical context to guide retrieval. Standard BM25 retrieval matches documents that contain the query word, but most relevant documents contain the query theme through indirect wordplay, not through direct term mention.
+
+\subsection{Semantic Indirection via Humor}
+Humor links are indirect and require world knowledge. For the query ``\textit{math}'', a relevant document might be: \textit{``A lawyer was defending a math teacher. He had to sum up.''} The humor is in the double meaning of ``sum up'' (legal summary + arithmetic sum). No part of this document is a direct lexical match to ``math'' except the word itself.
+
+\subsection{Extremely Small Training Set}
+Only 12 training queries with binary relevance judgments are available. This severely limits any supervised approach. An XGBoost model trained on 12 queries must use heavy regularization and leave-one-query-out cross-validation to avoid overfitting.
+
+\subsection{Label Imbalance}
+The number of relevant documents per training query ranges from 4 to 364, creating significant imbalance both within queries (positive-to-corpus ratio is $\ll 1\%$) and across queries. Any learning-to-rank approach must account for this distribution.

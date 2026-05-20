@@ -1,7 +1,74 @@
-\chapter{Related Work}
+\chapter{Literature Survey}
 \justify
-Classical ad-hoc retrieval relies on lexical matching (e.g., BM25), which works well when queries contain sufficient context. However, short-query retrieval benefits from semantic encoders and fusion strategies.
 
-Recent retrieval systems commonly adopt multi-stage designs: first-stage retrieval for recall, neural reranking for precision, and learning-to-rank for optimized final ordering. In humor-oriented tasks, lexical overlap alone cannot capture incongruity, pun potential, or sentiment contrast; therefore, dedicated humor features and pairwise classifiers are useful for ranking refinement.
+This chapter surveys key prior work in information retrieval, neural ranking, and humor-aware language processing that directly informs the design of the proposed system.
 
-The approach in this project follows this established direction by combining lexical, dense, and learned ranker components in a single pipeline.
+\section{Classical Lexical Retrieval: BM25}
+
+The BM25 (Best Matching 25) model, introduced by Robertson and Zaragoza \cite{bm25}, remains the dominant baseline for ad-hoc document retrieval. BM25 scores a document $d$ for query $q$ as:
+
+\begin{equation}
+\text{BM25}(d,q) = \sum_{t \in q} \text{IDF}(t) \cdot \frac{f(t,d) \cdot (k_1+1)}{f(t,d) + k_1 \cdot \left(1 - b + b \cdot \frac{|d|}{\text{avgdl}}\right)}
+\end{equation}
+
+where $f(t,d)$ is the term frequency, $|d|$ is document length, $\text{avgdl}$ is average document length, and $k_1$ and $b$ are free parameters. Despite its simplicity, BM25 provides a strong and efficient baseline for large-scale retrieval.
+
+However, BM25 is purely lexical---it relies on exact term matching and cannot capture semantic relationships or indirect humor links. For the JOKER task where documents are relevant through wordplay rather than term repetition, BM25 alone is insufficient.
+
+\section{Dense Retrieval and Semantic Similarity}
+
+Dense retrieval models address the vocabulary mismatch problem by encoding both queries and documents into a shared dense vector space. Karpukhin et al.\ \cite{dpr} introduced Dense Passage Retrieval (DPR), showing that bi-encoder models trained on question-answer pairs substantially outperform BM25 for open-domain QA. Subsequent work on general-purpose sentence embeddings produced the BGE model family (BAAI General Embeddings) \cite{bge}, which achieves state-of-the-art performance on MTEB benchmarks. The \texttt{bge-base-en-v1.5} model (110M parameters) encodes texts into 768-dimensional vectors, enabling efficient nearest-neighbor search via FAISS \cite{faiss}.
+
+\section{Neural Cross-Encoder Reranking}
+
+Cross-encoder models process a (query, document) pair jointly through a transformer, producing a fine-grained relevance score. Reimers and Gurevych \cite{sbert} introduced the Sentence-BERT and cross-encoder framework, showing that cross-encoders substantially outperform bi-encoders for re-ranking but are too slow for first-stage retrieval. The \texttt{ms-marco-MiniLM-L12-v2} cross-encoder, trained on the MS MARCO passage retrieval dataset, provides a good trade-off between quality and inference speed suitable for consumer GPUs.
+
+\section{Reciprocal Rank Fusion}
+
+Cormack et al.\ \cite{rrf} proposed Reciprocal Rank Fusion (RRF) as a parameter-free method for combining ranked lists from multiple retrieval systems. RRF assigns a score to each document $d$ as:
+\begin{equation}
+\text{RRF}(d) = \sum_{r \in R} \frac{1}{k + \text{rank}_r(d)}
+\end{equation}
+where $k=60$ is a smoothing constant and $R$ is the set of ranked lists being fused. RRF is robust to score scale differences across systems and does not require calibration or training, making it well-suited for merging lexical and dense candidate lists.
+
+\section{Learning to Rank}
+
+Learning-to-rank (L2R) approaches train a model to optimize a ranking-specific loss over (query, document) pairs. Chen and Guestrin \cite{xgboost} introduced XGBoost, a gradient-boosted tree ensemble that can be applied to ranking via the \texttt{rank:pairwise} objective (equivalent to RankNet). XGBoost has historically dominated leaderboards in structured data and ranking tasks due to its efficiency, regularization capabilities, and resistance to overfitting on small datasets. In this project, XGBoost L2R replaces hand-tuned static fusion weights, learning the optimal combination of 16 retrieval and humor features from the 12 available training queries.
+
+\section{Pseudo-Relevance Feedback}
+
+Query expansion via Pseudo-Relevance Feedback (PRF) was first formalized in the Relevance Model (RM3) by Lavrenko and Croft \cite{rm3}. RM3 constructs an expanded query by adding high-probability terms from the top-$k$ initially retrieved documents, weighted by their likelihood under a relevance model. For short, ambiguous queries (as in JOKER Task 1), PRF can dramatically improve recall by incorporating context that is absent from the original query.
+
+\section{Humor Modeling in NLP}
+
+Humor detection has been studied as a binary classification task (Is this sentence a joke?) and as a graded retrieval problem. Several CLEF JOKER workshops have explored this intersection. Linhares Pontes et al.\ \cite{joker2024} provided the 2024 CLEF JOKER overview, establishing BM25 baselines and defining humor-compatible relevance judgments. Van der Graaf et al.\ \cite{uams2024} (team UAms, top system in CLEF 2024) employed dense retrieval with BM25 interpolation, demonstrating the benefit of semantic signals. The 2025 SOTA system by pjmathematician \cite{sota2025} combines cross-encoder reranking with RRF fusion, achieving MAP@1000 $\approx$ 0.35 on the test set. The system in this project builds upon these insights by adding humor-specific features and learned rank fusion.
+
+\section{Pre-trained Language Models for Relevance}
+
+Liu et al.\ \cite{roberta} introduced RoBERTa, a robustly optimized variant of BERT \cite{bert} trained on larger data with more compute. RoBERTa's dynamic masking and larger batch training make it particularly strong for classification fine-tuning. In this project, \texttt{roberta-base} is fine-tuned as a humor-pair relevance classifier using positive (query, document) pairs from the training qrels and hard negatives mined from BM25 top-50 results.
+
+\section{Summary}
+
+Table~\ref{tab:related} summarizes the key prior works and how each is incorporated into the proposed system.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|p{4cm}|p{4cm}|p{5cm}|}
+\hline
+\textbf{Work} & \textbf{Contribution} & \textbf{Usage in this project} \\\hline
+Robertson \& Zaragoza \cite{bm25} & BM25 lexical retrieval & Stage 1 first-pass retrieval \\\hline
+Karpukhin et al.\ \cite{dpr} & Dense Passage Retrieval & Motivates dense Stage 2 \\\hline
+BAAI \cite{bge} & BGE embedding models & Dense encoder for Stage 2 \\\hline
+Johnson et al.\ \cite{faiss} & FAISS similarity search & Dense index for Stage 2 \\\hline
+Reimers \& Gurevych \cite{sbert} & Cross-encoder reranking & Stage 4 reranking \\\hline
+Cormack et al.\ \cite{rrf} & Reciprocal Rank Fusion & Stage 3 candidate merging \\\hline
+Chen \& Guestrin \cite{xgboost} & XGBoost L2R & Stage 7 adaptive fusion \\\hline
+Lavrenko \& Croft \cite{rm3} & RM3 query expansion & Stage 1 PRF enhancement \\\hline
+Liu et al.\ \cite{roberta} & RoBERTa fine-tuning & Stage 6 humor classifier \\\hline
+Linhares Pontes et al.\ \cite{joker2024} & CLEF JOKER 2024 overview & Dataset \& baselines \\\hline
+van der Graaf et al.\ \cite{uams2024} & Top CLEF 2024 system & Benchmark comparison \\\hline
+pjmathematician \cite{sota2025} & CLEF 2025 SOTA system & SOTA comparison target \\\hline
+\end{tabular}
+\caption{Summary of related works and their usage in the proposed system.}
+\label{tab:related}
+\end{table}

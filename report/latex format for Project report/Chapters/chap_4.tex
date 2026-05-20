@@ -1,33 +1,155 @@
-\chapter{Methodology and Experimental Setup}
+\chapter{Methodology and System Design}
 \justify
-The proposed system uses a seven-stage ranking pipeline.
 
-\section{Pipeline Stages}
-\begin{enumerate}
-    \item BM25 + character n-gram lexical retrieval.
-    \item Dense retrieval using BGE embeddings and FAISS.
-    \item Reciprocal Rank Fusion (RRF) for candidate merging.
-    \item Feature extraction (lexical, structural, and humor-aware).
-    \item Cross-encoder reranking on top candidates.
-    \item RoBERTa humor-pair scoring.
-    \item Final rank fusion using static weights or XGBoost L2R.
-\end{enumerate}
+The proposed system is a seven-stage retrieval and ranking pipeline. Each stage progressively refines the candidate set, trading off efficiency for precision. Figure~\ref{fig:pipeline} shows the complete architecture.
 
-\section{Architecture Figure (LaTeX Native)}
 \begin{figure}[H]
 \centering
-\begin{tikzpicture}[node distance=0.7cm, >=latex]
-\tikzstyle{blk}=[rectangle, draw, rounded corners, minimum width=11.5cm, minimum height=0.8cm, align=center]
-\node[blk,fill=gray!15] (q) {Query (1--3 words)};
-\node[blk,fill=blue!10,below=of q] (l) {Lexical Retrieval: BM25 + Char N-gram + PRF};
-\node[blk,fill=green!10,below=of l] (d) {Dense Retrieval: BGE + FAISS};
-\node[blk,fill=yellow!20,below=of d] (r) {RRF Candidate Fusion};
-\node[blk,fill=orange!20,below=of r] (f) {Feature Extraction + Cross-Encoder + Humor Classifier};
-\node[blk,fill=red!15,below=of f] (x) {Final Ranking: XGBoost L2R / Weighted Fusion};
-\draw[->] (q) -- (l); \draw[->] (l) -- (d); \draw[->] (d) -- (r); \draw[->] (r) -- (f); \draw[->] (f) -- (x);
-\end{tikzpicture}
-\caption{Native LaTeX diagram of the proposed retrieval architecture.}
+\includegraphics[width=\textwidth]{Media/fig_pipeline.png}
+\caption{The seven-stage multi-signal retrieval pipeline. Each stage is colour-coded: lexical (blue), dense (blue), fusion (purple), reranking (green), humor scoring (orange), and learned rank fusion (red).}
+\label{fig:pipeline}
 \end{figure}
 
-\section{Evaluation Protocol}
-Evaluation follows MAP@1000 on official task format outputs. Development emphasizes robustness under extremely small training-query count and highly sparse query semantics.
+\section{Stage 1 --- Lexical Retrieval}
+
+\subsection{BM25}
+The first retrieval pass uses BM25 to retrieve the top-1000 candidates. BM25 scores are computed as:
+\begin{equation}
+s_{\text{BM25}}(d,q) = \sum_{t \in q} \log\!\left(\frac{N - n_t + 0.5}{n_t + 0.5}\right) \cdot \frac{f_{t,d} \cdot (k_1+1)}{f_{t,d} + k_1 \!\left(1 - b + b\frac{|d|}{\overline{dl}}\right)}
+\end{equation}
+
+where $N$ is the corpus size, $n_t$ is the number of documents containing term $t$, $f_{t,d}$ is the term frequency of $t$ in document $d$, $|d|$ is document length, $\overline{dl}$ is the mean document length, and $k_1 = 1.2$, $b = 0.9$ are tuned hyper-parameters.
+
+\subsection{Character N-gram TF-IDF}
+To capture morphological variation and partial matches (e.g., ``coloring'' matching query ``colors''), a character-level TF-IDF index is built using 3- to 5-character n-grams. The combined lexical score is:
+\begin{equation}
+s_{\text{lex}}(d,q) = \alpha \cdot s_{\text{BM25}}(d,q) + (1-\alpha) \cdot s_{\text{char}}(d,q), \quad \alpha = 0.7
+\end{equation}
+
+\subsection{Pseudo-Relevance Feedback (RM3)}
+For very short queries, recall is low because few documents contain the exact query word. RM3 \cite{rm3} addresses this by:
+\begin{enumerate}
+    \item Retrieving an initial top-$K_{\text{fb}}$ result set with BM25 (default $K_{\text{fb}}=10$).
+    \item Computing term weights for each term $t'$ in those feedback documents using IDF weighting.
+    \item Selecting the top-$T$ expansion terms and appending them to the original query.
+    \item Re-retrieving with the expanded query.
+\end{enumerate}
+
+The expanded query is:
+\begin{equation}
+q_{\text{exp}} = \alpha_{\text{prf}} \cdot q + (1-\alpha_{\text{prf}}) \cdot \sum_{t' \in E} P(t' | R) \cdot t', \quad \alpha_{\text{prf}} = 0.6
+\end{equation}
+
+where $E$ is the set of $T=15$ expansion terms and $P(t'|R)$ is the smoothed term probability in the feedback documents.
+
+\section{Stage 2 --- Dense Retrieval}
+
+All 77,658 corpus documents are encoded offline into 768-dimensional embedding vectors using the \texttt{BAAI/bge-base-en-v1.5} bi-encoder model \cite{bge} (110 million parameters). The encoded vectors are indexed using FAISS \cite{faiss} with an inner-product index for efficient approximate nearest-neighbor search.
+
+At query time, the query $q$ is encoded with the same encoder into a vector $\mathbf{v}_q \in \mathbb{R}^{768}$, and FAISS retrieves the top-700 documents with the highest cosine similarity scores:
+\begin{equation}
+s_{\text{dense}}(d,q) = \frac{\mathbf{v}_q \cdot \mathbf{v}_d}{\|\mathbf{v}_q\| \cdot \|\mathbf{v}_d\|}
+\end{equation}
+
+Dense retrieval captures semantic relationships invisible to BM25---for example, matching ``\textit{death}'' to documents discussing ``dying'' in a comedic context without containing the exact word ``death''.
+
+\section{Stage 3 --- Reciprocal Rank Fusion}
+
+The top-1000 candidates from Stage 1 and the top-700 candidates from Stage 2 are merged using Reciprocal Rank Fusion \cite{rrf}:
+\begin{equation}
+s_{\text{RRF}}(d) = \frac{1}{k + \text{rank}_{\text{lex}}(d)} + \frac{1}{k + \text{rank}_{\text{dense}}(d)}, \quad k = 60
+\end{equation}
+
+where $\text{rank}_r(d)$ is the position of document $d$ in ranked list $r$ (using a large constant, e.g.\ $10^6$, for documents absent from a list). The merged list is sorted by $s_{\text{RRF}}$ and the top candidates are passed to subsequent stages.
+
+\section{Stage 4 --- Feature Extraction}
+
+For each candidate document, a 16-dimensional feature vector is constructed. These features capture lexical, structural, and humor-specific signals. Table~\ref{tab:features} describes each feature.
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{|p{3.2cm}|p{9cm}|}
+\hline
+\textbf{Feature} & \textbf{Description} \\\hline
+\texttt{lexical\_score}      & Combined BM25 + character n-gram score from Stage 1 \\\hline
+\texttt{dense\_score}        & Cosine similarity from BGE bi-encoder (Stage 2) \\\hline
+\texttt{rerank\_score}       & Cross-encoder relevance score (Stage 5) \\\hline
+\texttt{humor\_score}        & Fine-tuned RoBERTa humor classifier probability (Stage 6) \\\hline
+\texttt{exact\_match}        & Binary: does the query string appear verbatim in the document? \\\hline
+\texttt{token\_overlap}      & Fraction of query tokens that appear in the document \\\hline
+\texttt{char\_overlap}       & Fraction of query character n-grams appearing in the document \\\hline
+\texttt{doc\_len\_norm}      & Document length normalized by corpus mean (jokes prefer medium length) \\\hline
+\texttt{punct\_norm}         & Punctuation density; humorous text uses more punctuation \\\hline
+\texttt{exclaim\_norm}       & Exclamation mark density per token \\\hline
+\texttt{quote\_norm}         & Quotation mark density; dialogue-heavy jokes \\\hline
+\texttt{repeated\_words}     & Repetition ratio; wordplay often involves deliberate repetition \\\hline
+\texttt{query\_polysemy}     & Mean number of WordNet synsets for query words; more synsets $\to$ higher pun potential \\\hline
+\texttt{avg\_word\_rarity}   & Mean IDF of document words; unusual vocabulary is associated with humor \\\hline
+\texttt{question\_in\_doc}   & Binary: does the document contain ``?'' (setup-punchline structure) \\\hline
+\texttt{sentiment\_contrast} & Proportion of mixed positive/negative sentiment words (incongruity signal) \\\hline
+\end{tabular}
+\caption{16-dimensional feature vector computed per (query, document) candidate pair.}
+\label{tab:features}
+\end{table}
+
+\section{Stage 5 --- Cross-Encoder Reranking}
+
+A cross-encoder model (\texttt{cross-encoder/ms-marco-MiniLM-L12-v2}) \cite{sbert} is applied to the top-200 merged candidates. Unlike the bi-encoder in Stage 2 (which encodes query and document independently), a cross-encoder processes the concatenated pair \texttt{[CLS] query [SEP] document [SEP]} through a transformer, enabling full self-attention across the pair. The output is a fine-grained relevance score:
+\begin{equation}
+s_{\text{rerank}}(d,q) = f_{\theta}([q; d])
+\end{equation}
+
+where $f_\theta$ is the MiniLM cross-encoder with 22.7 million parameters. Inference is batched with batch size 32 to fit within 4 GB VRAM constraints.
+
+\section{Stage 6 --- Humor Pair Classifier}
+
+A \texttt{roberta-base} model \cite{roberta} is fine-tuned as a binary relevance classifier on task-specific (query, document) pairs. Training data is constructed as:
+
+\begin{itemize}
+    \item \textbf{Positives:} All $(q, d)$ pairs where $(q_{\text{id}}, d_{\text{id}}) \in \text{qrels}$. This yields 660 positive examples.
+    \item \textbf{Hard negatives:} For each query, 3 negative documents are sampled from the BM25 top-50 that are \textit{not} in the qrels. This yields $12 \times 3 \times 55/3 \approx 2640 $ total examples (660 positives + 1980 negatives).
+\end{itemize}
+
+The model is trained with binary cross-entropy loss for 3 epochs with learning rate $2 \times 10^{-5}$, batch size 4, and maximum sequence length 256 tokens. The output is a probability $s_{\text{humor}}(d,q) \in [0,1]$ representing the likelihood that $(q, d)$ is a humor-relevant pair.
+
+\section{Stage 7 --- Final Rank Fusion}
+
+\subsection{Option A: Static Weighted Fusion}
+
+The default fusion strategy combines all available scores linearly:
+\begin{equation}
+s_{\text{final}}(d,q) = w_1 s_{\text{lex}} + w_2 s_{\text{dense}} + w_3 s_{\text{rerank}} + w_4 s_{\text{humor}} + \sum_{i=5}^{16} w_i f_i(d,q)
+\end{equation}
+
+with default weights $w_1 = 1.0$, $w_2 = 0.8$, $w_3 = 1.2$, $w_4 = 1.0$. These weights are tuned via coordinate ascent on the training MAP.
+
+\subsection{Option B: XGBoost Learning-to-Rank (Recommended)}
+
+The recommended approach trains an \texttt{XGBRanker} model \cite{xgboost} with a pairwise ranking objective (\texttt{rank:pairwise}) on the 16-dimensional feature vectors. The training procedure is:
+
+\begin{algorithm}[H]
+\caption{XGBoost L2R Training with Leave-One-Query-Out CV}
+\begin{algorithmic}[1]
+\Require Training queries $Q = \{q_1, \ldots, q_{12}\}$, qrels $R$
+\For{each query $q_i \in Q$}
+    \State Retrieve top-200 candidates using the full pipeline
+    \State Compute 16-dim feature vector $\mathbf{x}_j$ for each candidate $d_j$
+    \State Set label $y_j = 1$ if $(q_i, d_j) \in R$, else $y_j = 0$
+\EndFor
+\State Train \texttt{XGBRanker}($X, y, \text{groups}$) with max\_depth=3, n\_estimators=100,\\
+\quad reg\_alpha=0.5, reg\_lambda=1.0
+\For{each fold $k = 1, \ldots, 12$} \Comment{Leave-one-query-out CV}
+    \State Train on $Q \setminus \{q_k\}$, evaluate MAP on $q_k$
+\EndFor
+\State \Return trained model and cross-validated MAP
+\end{algorithmic}
+\end{algorithm}
+
+At inference time, the trained XGBoost model scores each (query, document) feature vector and the documents are sorted by predicted score to produce the final ranking.
+
+\section{Implementation Details}
+
+The complete system is implemented in Python 3.11 with PyTorch 2.5.1 (CUDA 12.1). Key libraries include \texttt{sentence-transformers} for dense encoding, \texttt{faiss-cpu} for index search, \texttt{transformers} for cross-encoder and humor model inference, and \texttt{xgboost} for L2R. A Tkinter-based GUI provides interactive access to all pipeline stages, training controls, and evaluation.
+
+Hardware used: NVIDIA RTX 3050 Ti (4 GB VRAM), Intel i5-11th Gen, 16 GB RAM. Total VRAM usage at inference is approximately 1.5 GB (BGE: 440 MB + MiniLM: 570 MB + RoBERTa: 500 MB), leaving comfortable headroom on 4 GB.

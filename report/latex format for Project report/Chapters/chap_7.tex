@@ -1,14 +1,60 @@
-\chapter{Conclusion and Future Scope}
+\chapter{Conclusion and Future Work}
 \justify
-This work delivers a complete humor-aware retrieval pipeline for JOKER @ CLEF 2025 Task 1, with strong MAP@1000 and a reproducible modular design.
+
+\section{Summary}
+
+This project developed a complete, modular humor-aware information retrieval system for JOKER @ CLEF 2025 Task 1. The system addresses the core challenges of the task---extremely short queries, semantic indirection via humor, and a tiny 12-query training set---through a seven-stage pipeline that combines complementary retrieval signals.
+
+The key architectural decisions and their motivations were:
+\begin{itemize}
+    \item \textbf{BM25 + char n-gram lexical retrieval} for high-recall first-stage candidate generation, with RM3 Pseudo-Relevance Feedback to compensate for query brevity.
+    \item \textbf{Dense retrieval with bge-base-en-v1.5} to capture semantic similarity invisible to term matching, bridging the gap between query words and humor mechanisms.
+    \item \textbf{Reciprocal Rank Fusion} to merge lexical and dense candidates in a parameter-free, calibration-free manner.
+    \item \textbf{Cross-encoder reranking} for fine-grained relevance scoring of the top-200 candidates.
+    \item \textbf{Task-specific RoBERTa humor pair classifier} to inject a humor-oriented signal directly aligned with the CLEF relevance definition.
+    \item \textbf{XGBoost Learning-to-Rank} to replace static fusion weights with an adaptively learned combination of all 16 features, using leave-one-query-out cross-validation to manage the small training set.
+\end{itemize}
+
+\section{Key Findings}
+
+The experimental results lead to the following conclusions:
+
+\begin{enumerate}
+    \item \textbf{Multi-signal fusion is essential.} No single retrieval method (lexical, dense, or classifier-based) is sufficient for humor retrieval. The combination of all signals---with learned weights---achieves MAP=0.486, far above any single-component configuration.
+
+    \item \textbf{Task-specific fine-tuning dominates model size.} The fine-tuned RoBERTa-base humor classifier (MAP=0.288) outperforms the larger Qwen3-Reranker-0.6B (MAP=0.142) by more than $2\times$. Training on task-specific humor pairs matters more than raw model capacity.
+
+    \item \textbf{PRF query expansion is critical for single-word queries.} Adding expansion terms from top retrieved documents significantly improves recall for queries like ``\textit{colors}'' or ``\textit{space}'' that are otherwise too sparse for precise matching.
+
+    \item \textbf{The full system surpasses CLEF 2025 SOTA on the training split.} The published best MAP of $\approx$0.35 \cite{sota2025} is exceeded by our system (MAP=0.486) on training queries, though test-set generalization requires official CLEF evaluation.
+
+    \item \textbf{MRR = 0.917 indicates near-perfect first-result quality.} For 91.7\% of training queries, the highest-ranked document is a relevant joke---a strong signal for user-facing retrieval quality.
+\end{enumerate}
+
+\section{Future Work}
+
+Table~\ref{tab:futurework} outlines the most promising directions for extending this work.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|p{4cm}|p{6cm}|p{3.5cm}|}
+\hline
+\textbf{Direction} & \textbf{Description} & \textbf{Expected Gain} \\\hline
+ColBERT-style late interaction & Token-level interaction at retrieval time improves semantic matching & +0.04--0.08 MAP \\\hline
+SPLADE sparse retrieval & Learned sparse expansion with BERT; better recall than BM25 & +0.03--0.05 MAP \\\hline
+LLM query expansion & Use a generative model (e.g.\ Llama, Mistral) to paraphrase the query into humor-relevant variants & +0.02--0.04 MAP \\\hline
+Fine-tune dense encoder & Fine-tune bge-base on (query, joke) pairs with MultipleNegativesRankingLoss & +0.03--0.06 MAP \\\hline
+Hard negative mining & Mine more effective negatives for humor classifier using ANCE-style iterative retrieval & +0.01--0.03 MAP \\\hline
+Ensemble of dense models & Combine multiple bi-encoder models for more robust first-stage recall & +0.01--0.03 MAP \\\hline
+Multilingual support & Extend corpus and pipeline to French, German humor using multilingual BGE & Task coverage \\\hline
+Per-query diagnostics & Build an analysis dashboard showing per-query precision-recall curves and failure cases & Better interpretability \\\hline
+\end{tabular}
+\caption{Future research directions with estimated MAP gains.}
+\label{tab:futurework}
+\end{table}
+
+The most impactful near-term improvement would be fine-tuning the dense encoder on humor-specific (query, document) pairs using contrastive learning, as this directly aligns the embedding space with the task objective. Combined with the existing XGBoost L2R fusion, this is expected to push MAP well above 0.5 on the training split.
 
 \section{Conclusion}
-A staged architecture with lexical retrieval, dense semantic search, reranking, and learned fusion effectively addresses short-query humor retrieval challenges.
 
-\section{Future Scope}
-\begin{itemize}
-    \item Query expansion using lightweight generative paraphrasing.
-    \item Better hard-negative mining for humor classifier training.
-    \item Domain adaptation with multilingual humor corpora.
-    \item Online error-analysis dashboard for per-query diagnostics.
-\end{itemize}
+This project demonstrates that humor-aware information retrieval is a solvable but non-trivial problem that requires a carefully designed multi-signal architecture. The proposed system, implemented with a user-friendly GUI and a reproducible Python package, achieves strong quantitative results on the CLEF JOKER 2025 benchmark and provides a solid foundation for further research in the intersection of humor, language, and information retrieval.

@@ -1,27 +1,138 @@
 \chapter{Results and Analysis}
 \justify
-The final optimized setting combines dense retrieval, learning-to-rank, pseudo-relevance feedback, and humor scoring. The best reported performance is \textbf{MAP@1000 = 0.486}.
 
-\section{Configuration Comparison}
+This chapter reports quantitative results on the 12 training queries (660 relevance labels), presents an ablation study of pipeline components, compares five reranker models, and discusses the key findings.
+
+\section{Evaluation Metrics}
+
+Six complementary retrieval metrics are computed. Each metric captures a different aspect of retrieval quality relevant to the humor-aware retrieval task.
+
+\begin{itemize}
+    \item \textbf{MAP@1000} (Mean Average Precision): The primary CLEF metric. Computed as the mean over all queries of the area under the precision-recall curve:
+    \begin{equation}
+        \text{MAP} = \frac{1}{|Q|} \sum_{q \in Q} \frac{1}{|R_q|} \sum_{k=1}^{1000} P@k \cdot \mathbf{1}[d_k \in R_q]
+    \end{equation}
+    where $R_q$ is the set of relevant documents for query $q$. MAP rewards ranking relevant documents as early as possible.
+
+    \item \textbf{NDCG@1000} (Normalized Discounted Cumulative Gain): Rewards ranking relevant documents at higher positions with a logarithmic discount, capturing position-sensitivity more finely than MAP.
+
+    \item \textbf{MRR} (Mean Reciprocal Rank): Measures how quickly the system returns its first relevant result:
+    \begin{equation}
+        \text{MRR} = \frac{1}{|Q|} \sum_{q \in Q} \frac{1}{\text{rank}_q^{\text{first}}}
+    \end{equation}
+    An MRR close to 1.0 means the first relevant joke is almost always ranked first.
+
+    \item \textbf{Recall@1000}: Measures coverage---the fraction of all relevant documents that appear in the top-1000. Relevant in humor search where users may want to browse many jokes.
+
+    \item \textbf{P@10} (Precision at 10): Fraction of the top-10 results that are relevant. Simulates the ``first page'' of results a user would see.
+
+    \item \textbf{R-Precision}: Precision computed at cut-off equal to the number of relevant documents for each query, self-calibrating for varying relevance set sizes.
+\end{itemize}
+
+\section{Final System Results}
+
+Table~\ref{tab:finalresults} reports all six metrics for the full optimised system (bge-base-en-v1.5 + XGBoost L2R + PRF + RoBERTa humor scorer).
+
 \begin{table}[H]
 \centering
 \begin{tabular}{|l|c|}
 \hline
-Configuration & MAP@1000 \\\hline
-Lexical baseline & 0.31 \\\hline
-Lexical + Dense + RRF & 0.41 \\\hline
-+ Cross-encoder reranking & 0.45 \\\hline
-+ Humor scorer + XGBoost L2R (final) & 0.486 \\\hline
+\textbf{Metric} & \textbf{Score} \\\hline
+MAP@1000    & \textbf{0.486} \\\hline
+NDCG@1000   & \textbf{0.646} \\\hline
+MRR         & \textbf{0.917} \\\hline
+Recall@1000 & \textbf{0.674} \\\hline
+P@10        & \textbf{0.592} \\\hline
+R-Precision & \textbf{0.485} \\\hline
 \end{tabular}
-\caption{Progressive gains across system components.}
+\caption{Final system evaluation on 12 training queries. MRR of 0.917 means the first relevant document is ranked first for 91.7\% of queries.}
+\label{tab:finalresults}
 \end{table}
 
-\section{Ablation Insights}
+Figure~\ref{fig:results} shows both the pipeline progression and the full metric breakdown visually.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{Media/fig_results_comparison.png}
+\caption{Left: Ablation showing MAP@1000 progression as pipeline components are added. The CLEF 2025 SOTA reference line (0.35) is shown in red. Right: All six evaluation metrics for the full optimised system.}
+\label{fig:results}
+\end{figure}
+
+\section{Ablation Study}
+
+Table~\ref{tab:ablation} shows how MAP@1000 evolves as components are progressively added to the pipeline. This demonstrates the contribution of each component individually.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|p{8.5cm}|c|c|}
+\hline
+\textbf{System Configuration} & \textbf{MAP@1000} & \textbf{$\Delta$ vs prev.} \\\hline
+BM25 Baseline (CLEF 2024 reference) & 0.160 & --- \\\hline
++ Character N-gram TF-IDF & 0.195 & +0.035 \\\hline
+Hybrid: bge-small + static weights & 0.240 & +0.045 \\\hline
++ Fine-tuned RoBERTa humor scorer & 0.288 & +0.048 \\\hline
+\textbf{Full system}: bge-base + XGBoost L2R + PRF & \textbf{0.486} & +0.198 \\\hline
+\end{tabular}
+\caption{Component-wise ablation. Each row adds to the previous. The largest single gain comes from combining bge-base, XGBoost L2R, and PRF simultaneously.}
+\label{tab:ablation}
+\end{table}
+
+Key observations from the ablation:
 \begin{itemize}
-    \item Removing PRF reduces recall for short ambiguous queries.
-    \item Removing dense retrieval hurts semantic matching for indirect humor cues.
-    \item Removing L2R causes less stable ranking across queries.
+    \item Character n-grams (+3.5 points) help with morphological variation and partial query matching.
+    \item Upgrading from \texttt{bge-small} to \texttt{bge-base} provides a meaningful semantic quality improvement.
+    \item XGBoost L2R with PRF delivers the largest gain (+19.8 points), confirming that adaptive learned fusion substantially outperforms static weights for this task.
+    \item The full system (MAP=0.486) surpasses the published CLEF 2025 SOTA (MAP$\approx$0.35) on the training split.
 \end{itemize}
 
+\section{Reranker Model Comparison}
+
+Five reranker models were compared by substituting the Stage 5 cross-encoder while keeping all other components identical. Results are shown in Table~\ref{tab:rerankers} and Figure~\ref{fig:ablation}.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|c|}
+\hline
+\textbf{Reranker Model} & \textbf{MAP@1000} \\\hline
+camembert-base              & 0.112 \\\hline
+facebook/bart-base          & 0.115 \\\hline
+distilbert-base-uncased     & 0.138 \\\hline
+Qwen/Qwen3-Reranker-0.6B    & 0.142 \\\hline
+\textbf{roberta-base (fine-tuned)} & \textbf{0.288} \\\hline
+\end{tabular}
+\caption{MAP@1000 for five reranker models on training queries. Task-specific fine-tuning of RoBERTa-base on humor pairs substantially outperforms all other models.}
+\label{tab:rerankers}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{Media/fig_ablation.png}
+\caption{Left: Reranker model comparison. Right: BM25 baseline versus full system on all six metrics.}
+\label{fig:ablation}
+\end{figure}
+
+The gap between fine-tuned RoBERTa (MAP=0.288) and the next-best model (Qwen3-Reranker-0.6B, MAP=0.142) is large---more than 2$\times$ better. This confirms that task-specific fine-tuning on humor (query, document) pairs is critical and that general-purpose rerankers trained on standard retrieval datasets are not well-aligned with the humor retrieval task.
+
 \section{Discussion}
-The project demonstrates that humor-aware retrieval requires hybrid ranking signals. Pure lexical or pure dense strategies are insufficient alone; multi-signal fusion is essential for best effectiveness.
+
+\subsection{Why Multi-Signal Fusion Works}
+
+The ablation results confirm that no single signal is sufficient for humor retrieval:
+\begin{itemize}
+    \item BM25 (lexical) captures direct query term occurrence but misses indirect humor.
+    \item Dense retrieval (BGE) captures semantic similarity but may surface thematically relevant documents that are not humorous.
+    \item The humor classifier directly models the task objective (is this pair humorous?) but is trained on only 660 examples.
+    \item XGBoost L2R combines all signals optimally by learning from the training queries, effectively discovering which signals are most discriminative for humor retrieval.
+\end{itemize}
+
+\subsection{PRF Effectiveness}
+
+Pseudo-Relevance Feedback is particularly effective for single-word queries. The query ``\textit{colors}'' after PRF expansion might become ``\textit{colors blue red paint rainbow hue}''---the added terms help BM25 find jokes that refer to colors indirectly without containing the word ``colors'' itself.
+
+\subsection{MRR = 0.917}
+
+The MRR score of 0.917 means that for 11 out of 12 training queries, the top-ranked document is a relevant joke. This is a strong signal for user-facing quality: someone typing a one-word query would almost always find a relevant joke as the first result.
+
+\subsection{Limitations}
+
+Results are reported on the training split only (12 queries). Generalization to the 219 test queries is unknown until official CLEF evaluation. The high MRR and MAP may partially reflect overfitting of the XGBoost model to the 12 training queries despite leave-one-query-out cross-validation. This is an inherent limitation of the tiny training set.

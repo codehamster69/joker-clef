@@ -1,16 +1,68 @@
 \chapter{Introduction}
 \justify
-Humor-aware retrieval is an advanced form of information retrieval where the system must jointly model topical relevance and comedic intent. In JOKER @ CLEF 2025 Task 1, queries are extremely short (typically one to three words), which increases ambiguity and makes lexical matching alone insufficient.
 
-This project, \textbf{JOKER-CLEF}, addresses the challenge through a multi-stage retrieval and reranking architecture. The system first generates high-recall candidates, then progressively refines rankings using semantic similarity and humor-oriented signals.
+Information Retrieval (IR) is the task of identifying documents from a large collection that are relevant to a user's information need. Classical IR systems model relevance as topical similarity between query terms and document content. However, a growing family of creative and subjective search scenarios requires the system to go beyond topical matching and model \textit{intent}, \textit{style}, or \textit{humor}. JOKER @ CLEF 2025 Task 1 is one such scenario: it asks a retrieval system to find humorous text snippets that are semantically linked to a very short query through comedic mechanisms like puns, wordplay, and incongruity.
+
+\section{Background and Motivation}
+
+Humor is a linguistically complex phenomenon. A joke may be relevant to the query ``\textit{death}'' not because the word ``death'' appears in it, but because the joke exploits the dual meaning of ``dying'' in a comedic context (e.g., \textit{``Did you know that autopsy is a dying practice?''}). This indirect semantic link is invisible to term-frequency based retrieval methods such as BM25.
+
+The JOKER @ CLEF shared task series was established to create benchmark data for studying humor-aware retrieval. Task 1 specifically asks participants to retrieve and rank 1000 documents per query from a 77,658-document English corpus. Queries are extremely short---97.4\% of all 231 queries (training + test combined) are single words---making this one of the most challenging short-query retrieval settings in shared-task literature.
 
 \section{Problem Statement}
-Given a short query and a corpus of humorous snippets, retrieve and rank documents that are both relevant to the query and humorous in context.
 
-\section{Objectives}
+Given a query $q$ (typically 1--3 words) and a corpus $D$ of short humorous text fragments, retrieve and rank up to 1000 documents $d \in D$ that are:
+\begin{enumerate}
+    \item \textbf{Topically relevant} to $q$: the document is related to the subject implied by the query, and
+    \item \textbf{Humor-compatible} with $q$: the document exploits the comedic or ambiguous dimension of the query word.
+\end{enumerate}
+
+The official evaluation criterion is Mean Average Precision at 1000 (MAP@1000), computed over the full set of test queries.
+
+\section{Key Challenges}
+
+The JOKER Task 1 setting presents several difficulties that distinguish it from standard ad-hoc retrieval:
+
 \begin{itemize}
-    \item Build a reproducible pipeline for CLEF JOKER Task 1 retrieval.
-    \item Improve baseline lexical retrieval using dense retrieval and rank fusion.
-    \item Introduce humor-aware and linguistic features for final ranking.
-    \item Evaluate model variants using MAP@1000 and component-wise ablations.
+    \item \textbf{Query brevity.} With most queries being a single word, there is almost no lexical context available for matching. Systems must rely heavily on semantic understanding and corpus statistics.
+
+    \item \textbf{Semantic indirection.} The humorous link between query and document is usually indirect. The query ``\textit{colors}'' matches a document containing the pun ``\textit{Oh, my gourd!}'' (blue ribbon $\to$ blue $\to$ color) via a chain of semantic steps that keyword matching cannot capture.
+
+    \item \textbf{Tiny training set.} Only 12 training queries with 660 positive relevance labels are provided. This severely limits supervised learning approaches and demands strong regularization.
+
+    \item \textbf{Scale.} 77,658 documents must be ranked efficiently within reasonable time and hardware constraints (consumer-grade GPU with 4 GB VRAM).
+\end{itemize}
+
+\section{Proposed Approach and Contributions}
+
+This project proposes a \textbf{multi-stage hybrid retrieval pipeline} that combines complementary ranking signals:
+
+\begin{itemize}
+    \item A high-recall first stage combining BM25 and character n-gram TF-IDF retrieval, optionally enhanced with Pseudo-Relevance Feedback (PRF/RM3) for query expansion.
+    \item A dense semantic retrieval stage using the \texttt{BAAI/bge-base-en-v1.5} bi-encoder and a pre-built FAISS index.
+    \item Reciprocal Rank Fusion (RRF) to merge the two candidate lists without score calibration.
+    \item A cross-encoder re-scorer (\texttt{ms-marco-MiniLM-L12-v2}) applied to the top-200 candidates.
+    \item A humor-specific pair classifier fine-tuned from \texttt{roberta-base} on task data.
+    \item An XGBoost Learning-to-Rank model trained on a 16-dimensional per-document feature vector, replacing hand-tuned static fusion weights with adaptively learned ones.
+\end{itemize}
+
+The main contributions of this work are:
+\begin{enumerate}
+    \item A complete, open-source implementation of the humor-aware retrieval pipeline with a GUI for interactive experimentation.
+    \item Introduction of XGBoost Learning-to-Rank with leave-one-query-out cross-validation as a robust fusion strategy for very small training sets.
+    \item Integration of Pseudo-Relevance Feedback to handle ultra-short queries.
+    \item A comprehensive evaluation using six complementary metrics (MAP, NDCG, MRR, Recall, P@10, R-Precision).
+    \item Empirical comparison of five reranker models on the humor retrieval task.
+\end{enumerate}
+
+\section{Report Organization}
+
+The remainder of this report is structured as follows:
+
+\begin{itemize}
+    \item \textbf{Chapter 2} reviews relevant literature on information retrieval, neural ranking, and humor-aware NLP.
+    \item \textbf{Chapter 3} describes the dataset, data formats, and task characteristics.
+    \item \textbf{Chapter 4} presents the full methodology including all pipeline stages, mathematical formulations, and feature engineering.
+    \item \textbf{Chapter 5} reports experimental results, ablation studies, and discussion.
+    \item \textbf{Chapter 6} concludes the report and outlines directions for future work.
 \end{itemize}

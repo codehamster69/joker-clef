@@ -54,7 +54,7 @@ Figure~\ref{fig:results} shows both the pipeline progression and the full metric
 \begin{figure}[H]
 \centering
 \includegraphics[width=\textwidth]{Media/fig_results_comparison.png}
-\caption{Left: Ablation showing MAP@1000 progression as pipeline components are added. The CLEF 2025 SOTA reference line (0.35) is shown in red. Right: All six evaluation metrics for the full optimised system.}
+\caption{Left: Ablation showing MAP@1000 progression as pipeline components are added. The CLEF 2026 SOTA reference line (0.35) is shown in red. Right: All six evaluation metrics for the full optimised system.}
 \label{fig:results}
 \end{figure}
 
@@ -82,7 +82,7 @@ Key observations from the ablation:
     \item Character n-grams (+3.5 points) help with morphological variation and partial query matching.
     \item Upgrading from \texttt{bge-small} to \texttt{bge-base} provides a meaningful semantic quality improvement.
     \item XGBoost L2R with PRF delivers the largest gain (+19.8 points), confirming that adaptive learned fusion substantially outperforms static weights for this task.
-    \item The full system (MAP=0.486) surpasses the published CLEF 2025 SOTA (MAP$\approx$0.35) on the training split.
+    \item The full system (MAP=0.486) surpasses the published CLEF 2026 SOTA (MAP$\approx$0.35) on the training split.
 \end{itemize}
 
 \section{Reranker Model Comparison}

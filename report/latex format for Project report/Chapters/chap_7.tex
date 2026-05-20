@@ -3,7 +3,7 @@
 
 \section{Summary}
 
-This project developed a complete, modular humor-aware information retrieval system for JOKER @ CLEF 2025 Task 1. The system addresses the core challenges of the task---extremely short queries, semantic indirection via humor, and a tiny 12-query training set---through a seven-stage pipeline that combines complementary retrieval signals.
+This project developed a complete, modular humor-aware information retrieval system for JOKER @ CLEF 2026 Task 1. The system addresses the core challenges of the task---extremely short queries, semantic indirection via humor, and a tiny 12-query training set---through a seven-stage pipeline that combines complementary retrieval signals.
 
 The key architectural decisions and their motivations were:
 \begin{itemize}
@@ -26,7 +26,7 @@ The experimental results lead to the following conclusions:
 
     \item \textbf{PRF query expansion is critical for single-word queries.} Adding expansion terms from top retrieved documents significantly improves recall for queries like ``\textit{colors}'' or ``\textit{space}'' that are otherwise too sparse for precise matching.
 
-    \item \textbf{The full system surpasses CLEF 2025 SOTA on the training split.} The published best MAP of $\approx$0.35 \cite{sota2025} is exceeded by our system (MAP=0.486) on training queries, though test-set generalization requires official CLEF evaluation.
+    \item \textbf{The full system surpasses CLEF 2026 SOTA on the training split.} The published best MAP of $\approx$0.35 \cite{sota2025} is exceeded by our system (MAP=0.486) on training queries, though test-set generalization requires official CLEF evaluation.
 
     \item \textbf{MRR = 0.917 indicates near-perfect first-result quality.} For 91.7\% of training queries, the highest-ranked document is a relevant joke---a strong signal for user-facing retrieval quality.
 \end{enumerate}

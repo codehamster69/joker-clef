@@ -29,7 +29,9 @@
 \usepackage{algpseudocode}
 \usepackage{float}
 \usepackage{pdfpages}
-\usepackage{hyperref} 
+\usepackage{hyperref}
+\usepackage{longtable}
+\usepackage{booktabs}
 
 
 
@@ -59,13 +61,15 @@
 \setlength{\textheight}{8.5in}
 \setlength{\textwidth}{6.0in}
 
-\def\mytitle{JOKER @ CLEF 2025 Task 1: Humor-Aware Information Retrieval}
+\def\mytitle{Humor Aware Information Retrieval}
 \def\myname{Rohandeep}
-\def\mydegree{M.Tech CSE}
+\def\mydegree{M.Tech CSE (Semester II)}
 \def\mysupervisor{Dr. Ritesh Kumar}
 \def\myrollno{PG25CS07}
 \def\mydep{Computer Science and Engineering}
 \def\mydegreedate{May, 2026}
+\def\myexaminerone{Dr. Rachit Nimavat}
+\def\myexaminertwo{Dr. Kaustubh Dhondge}
 
 \setlength{\marginparwidth}{2cm}
 \floatplacement{figure}{H}
@@ -108,7 +112,10 @@
     \phantomsection
     \addcontentsline{toc}{chapter}{List of Figures}
     \listoffigures
-    % \listoftables
+
+    \phantomsection
+    \addcontentsline{toc}{chapter}{List of Tables}
+    \listoftables
     
     %Main material
     \clearpage

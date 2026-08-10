@@ -23,6 +23,7 @@ src/joker_clef_task1.egg-info/
 dist/
 build/
 .eggs/
+.venv/
 
 # PowerPoint / Office files
 *.pptx

@@ -316,7 +316,7 @@ add_bullets(s, Inches(7.1), Inches(2.55), Inches(5.4), Inches(3.6), [
 
 # ---------------------------------------------------------------- Slide 11: Roadmap (flowchart)
 s = section_header(11, "Putting It Together", "Research Roadmap")
-add_image_centered(s, os.path.join(IMG, "04_research_roadmap.png"), Inches(1.55), Inches(6.6), Inches(5.65))
+add_image_centered(s, os.path.join(IMG, "04_research_roadmap.png"), Inches(2.9), Inches(12.3), Inches(3.4))
 
 # ---------------------------------------------------------------- Slide 12: Expected Contributions
 s = section_header(12, "Contributions", "Expected Contributions")

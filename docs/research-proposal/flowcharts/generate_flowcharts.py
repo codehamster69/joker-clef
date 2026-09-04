@@ -247,46 +247,48 @@ def fig_study_design():
 
 
 # =====================================================================
-# 4. RESEARCH ROADMAP (thesis narrative, vertical)
+# 4. RESEARCH ROADMAP (thesis narrative, horizontal)
 # =====================================================================
 def fig_roadmap():
-    W, H = 8.6, 9.6
+    W, H = 19.5, 4.5
     fig, ax = new_fig(W, H)
 
     ax.text(W / 2, H - 0.35, "Research Roadmap", ha="center", va="center",
-            fontsize=16, fontweight="bold", color=NAVY)
+            fontsize=17, fontweight="bold", color=NAVY)
 
     stages = [
-        ("The Problem", "Labs verify presence,\nnot authorship of live work", LIGHT_GREY, GREY),
-        ("Literature Gap", "Process-driven detection (take-home) +\nphysical attendance systems (checkpoint only)\n= live in-person authorship unaddressed",
+        ("The Problem", "Labs verify presence,\nnot authorship of\nlive work", LIGHT_GREY, GREY),
+        ("Literature Gap", "Take-home detection +\ncheckpoint attendance =\nlive authorship unaddressed",
          LIGHT_AMBER, AMBER),
-        ("Research Question", "Do process signals (keystroke IAT, edit\nsequences, AST jumps) distinguish authentic\nfrom proxy-typed in-lab work?", LIGHT_BLUE, BLUE),
-        ("System + Study Design", "Process-instrumented lab IDE\n+ controlled Groups A/B/C", LIGHT_TEAL, TEAL),
-        ("Validation", "Ground truth + instructor labeling\n+ held-out retest", LIGHT_TEAL, TEAL),
-        ("Expected Contributions", "First controlled live-vs-take-home comparison;\nscoped instructor-facing flagging tool", LIGHT_RED, RED),
+        ("Research Question", "Do process signals\ndistinguish authentic\nfrom proxy-typed work?", LIGHT_BLUE, BLUE),
+        ("System + Study Design", "Instrumented lab IDE +\ncontrolled Groups A/B/C", LIGHT_TEAL, TEAL),
+        ("Validation", "Ground truth + instructor\nlabeling + held-out retest", LIGHT_TEAL, TEAL),
+        ("Expected Contributions", "First live-vs-take-home\ncomparison; instructor\nflagging tool", LIGHT_RED, RED),
     ]
 
     n = len(stages)
-    bh = 1.35
-    top_margin = 0.75
-    total_gap = H - top_margin - n * bh
-    gap = total_gap / n
-    bw = 7.2
-    x = (W - bw) / 2
+    bw = 2.85
+    gap = (W - n * bw) / (n + 1)
+    y_top = 2.15
+    bh_top = 0.95
+    y_desc = 0.35
+    bh_desc = 1.65
 
-    y = H - top_margin
-    ys = []
-    for title, desc, fc, ec in stages:
-        y -= bh
-        ys.append(y)
-        box(ax, (x, y), bw, bh, title + "\n" + desc, facecolor=fc, edgecolor=ec,
-            fontsize=10.2, textcolor=NAVY)
-        y -= gap
+    xs = []
+    for i, (title, desc, fc, ec) in enumerate(stages):
+        x = gap + i * (bw + gap)
+        xs.append(x)
+        box(ax, (x, y_top), bw, bh_top, title, facecolor=fc, edgecolor=ec,
+            fontsize=10.3, textcolor=NAVY)
+        box(ax, (x, y_desc), bw, bh_desc, desc, facecolor=WHITE, edgecolor=ec,
+            fontsize=9.2, fontweight="normal", textcolor=GREY, lw=1.1)
 
     for i in range(n - 1):
-        y_start = ys[i]
-        y_end = ys[i + 1] + bh
-        arrow(ax, (W / 2, y_start), (W / 2, y_end), color=GREY, lw=2.2, mutation_scale=20)
+        x_start = xs[i] + bw
+        x_end = xs[i + 1]
+        y = y_top + bh_top / 2
+        arrow(ax, (x_start + 0.05, y), (x_end - 0.05, y), color=GREY, lw=2.2,
+              mutation_scale=20)
 
     fig.tight_layout()
     fig.savefig(os.path.join(OUTDIR, "04_research_roadmap.png"), bbox_inches="tight")

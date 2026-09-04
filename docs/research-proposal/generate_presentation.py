@@ -124,7 +124,7 @@ def title_slide():
               "Catching live, in-person proxy-typing that no current attendance\nor plagiarism system is built to detect",
               size=18, color=RGBColor(0xC9, 0xD6, 0xEE), align=PP_ALIGN.LEFT, line_spacing=1.2)
     add_text(s, Inches(0.9), Inches(6.7), Inches(8), Inches(0.5),
-              "M.Tech Research Proposal  ·  CodeHamsters, M.Tech CSE  ·  IIIT Surat",
+              "M.Tech Research Proposal  ·  Rohandeep, M.Tech CSE  ·  IIIT Surat",
               size=14, color=RGBColor(0x9D, 0xAE, 0xD1))
     return s
 
@@ -345,7 +345,7 @@ add_text(s, Inches(0.9), Inches(2.8), Inches(11.5), Inches(1.2),
 add_text(s, Inches(0.9), Inches(3.85), Inches(11), Inches(0.6),
           "Questions & Discussion", size=18, color=RGBColor(0xC9, 0xD6, 0xEE))
 add_text(s, Inches(0.9), Inches(6.7), Inches(8), Inches(0.5),
-          "CodeHamsters, M.Tech CSE  ·  IIIT Surat", size=13, color=RGBColor(0x9D, 0xAE, 0xD1))
+          "Rohandeep, M.Tech CSE  ·  IIIT Surat", size=13, color=RGBColor(0x9D, 0xAE, 0xD1))
 
 out_path = os.path.join(HERE, "Process-Aware_Authenticity_Detection_Presentation.pptx")
 prs.save(out_path)
